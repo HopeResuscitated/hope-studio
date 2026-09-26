@@ -24,6 +24,20 @@ Run `npm run check` to test the guarantees: approval gate, roles, CAN-SPAM, mino
 
 **Demo without the server:** open `web/` from any static host. With no server to talk to, the same core runs in the browser with sample data kept in that browser. Nothing is emailed or posted.
 
+## Put it online (stable, and on your phone)
+
+Hope Studio needs an always-on Node server: it keeps your data and saved keys on disk, and it runs the Monday agent run and the 5-minute publish queue itself. Vercel only serves the `web/` folder, so a Vercel site runs as the in-browser demo.
+
+**Render (recommended).**
+1. In Render, choose **New › Blueprint** and pick this repo. `render.yaml` sets up everything: an always-on service with https, health checks, auto-deploy on every push, and a 1 GB permanent disk at `/var/data`. It needs the Starter plan, about $7 a month.
+2. Render asks for `LEILA_PASSWORD` and `CIERRA_PASSWORD`. Use long ones.
+3. Open the `…onrender.com` address it gives you. The sign-in redirect addresses pick it up automatically.
+4. Optional: add a custom domain such as `studio.hope-resuscitated.org` in Render. Then set `PUBLIC_BASE_URL` to that address and use it in the Google and Meta redirect URIs.
+
+**Railway.** New project › Deploy from GitHub. Add a volume mounted at `/app/data`, and set `COOKIE_SECURE=1` and the two passwords. The public address is detected automatically.
+
+**Install it on your phone.** Open the address in Safari on iPhone and choose **Share › Add to Home Screen**, or in Chrome on Android choose **Install app**. Hope Studio then opens full-screen like an app, with a bottom tab bar (Inbox, Grants, Outreach, Social), badges for items waiting on your OK, and shortcuts to the inbox. Sign-ins last 14 days. The app shell opens even without a connection, but approving and sending need one.
+
 ## Connect your accounts
 
 Sign in as Leila, open **Settings › Connect your accounts**, and follow the steps on each card. Keys and sign-ins are saved on the server in `data/secrets.json` (readable only by the server, never sent back to the browser, never included in data exports). Values set there win over the same names in `.env`.

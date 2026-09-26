@@ -1,0 +1,28 @@
+# One-click hosting on Render: New › Blueprint › pick this repo.
+# An always-on Node service with https, health checks, auto-deploy on push,
+# and a permanent disk for Hope Studio's data, uploads and saved keys.
+services:
+  - type: web
+    name: hope-studio
+    runtime: node
+    plan: starter            # a disk needs a paid instance
+    region: ohio
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: hope-studio-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_DIR
+        value: /var/data
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: LEILA_PASSWORD
+        sync: false          # Render asks for these when you create the Blueprint
+      - key: CIERRA_PASSWORD
+        sync: false

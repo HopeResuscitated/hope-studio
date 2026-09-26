@@ -19,6 +19,11 @@ import { seedAll, seedCore } from '../web/core/seed.js';
 import { raiseAlert, audit } from '../web/core/audit.js';
 
 loadEnv();
+// On Render or Railway, use the address they assign so sign-in redirects and Instagram media URLs are right.
+if (!process.env.PUBLIC_BASE_URL) {
+  const hosted = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '');
+  if (hosted) process.env.PUBLIC_BASE_URL = hosted;
+}
 const PORT = +env('PORT', '8787');
 const HOST = env('HOST', '0.0.0.0');
 const DATA_DIR = path.resolve(ROOT, env('DATA_DIR', 'data'));
@@ -83,7 +88,7 @@ const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.webp': 'image/webp', '.gif': 'image/gif', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.heic': 'image/heic',
-  '.doc': 'application/msword', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+  '.doc': 'application/msword', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json',
 };
 
 const SECURITY = {
