@@ -1,4 +1,7 @@
 {
-  "outputDirectory": "web",
-  "cleanUrls": true
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/", "destination": "/web/index.html" },
+    { "source": "/(.*)", "destination": "/web/$1" }
+  ]
 }
