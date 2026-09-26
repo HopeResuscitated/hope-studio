@@ -1,0 +1,16 @@
+{
+  "name": "hope-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hope Resuscitated's Grant, Outreach and Social agents on one shared core, with a human approval gate on everything that leaves the building.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/server.js",
+    "check": "node server/selftest.js",
+    "password": "node server/set-password.js"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.128.0"
+  }
+}

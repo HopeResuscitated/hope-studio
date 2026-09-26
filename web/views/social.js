@@ -1,0 +1,475 @@
+// Social Studio: This week · Media library · Post composer · Calendar · Copy month
+
+import { html, icon, chip, pillarChip, fdate, ct, dialog, field, toast, when, plural, thumb, time12, stateChip } from '../ui.js';
+import { checksList, fixBoxes, sourcesRow } from './grants.js';
+
+const PILLARS = ['Educate', 'Equip', 'Empower', 'Respond', 'Lead'];
+const PLATFORM = (p) => (p.platforms || []).map((x) => (x === 'instagram' ? (p.media?.kind === 'video' ? 'IG Reel' : 'IG') : (p.media?.kind === 'video' ? 'FB video' : 'FB'))).join(' + ');
+
+// ---------- Reading media in the browser: a thumbnail, and video frames every 2 s ----------
+
+function drawToJpeg(src, w, h, max = 640) {
+  const scale = Math.min(1, max / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * scale);
+  c.height = Math.round(h * scale);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.72);
+}
+
+async function readImage(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return { thumb: drawToJpeg(img, img.naturalWidth, img.naturalHeight, 480), frames: [drawToJpeg(img, img.naturalWidth, img.naturalHeight, 1024)], aspect: img.naturalWidth / img.naturalHeight };
+  } catch {
+    return { thumb: null, frames: [] }; // HEIC and other formats the browser can't draw
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function readVideo(file) {
+  const url = URL.createObjectURL(file);
+  const v = document.createElement('video');
+  v.muted = true;
+  v.preload = 'auto';
+  v.src = url;
+  try {
+    await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej(new Error('unreadable')); setTimeout(res, 8000); });
+    const dur = v.duration || 0;
+    const frames = [];
+    const times = [];
+    for (let t = 0.5; t < dur && times.length < 12; t += 2) times.push(t);
+    if (!times.length) times.push(0);
+    for (const t of times) {
+      v.currentTime = t;
+      await new Promise((res) => { v.onseeked = res; setTimeout(res, 3000); });
+      frames.push(drawToJpeg(v, v.videoWidth, v.videoHeight, 640));
+    }
+    return { thumb: frames[0] || null, frames, duration_s: dur, aspect: v.videoWidth / v.videoHeight };
+  } catch {
+    return { thumb: null, frames: [] };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+const week = {
+  title: 'Social · This week',
+  load: (app) => app.call('socialWeek'),
+  render(d) {
+    const pct = d.stats.total ? Math.round((d.stats.scheduled / d.stats.total) * 100) : 0;
+    const onTrack = d.stats.scheduled >= d.stats.total - d.open.length && !d.flagged.length;
+    return html`
+    <header class="page-head">
+      <div class="head-text">
+        <span class="eyebrow">${new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Chicago' })} check-in · ${d.month} plan</span>
+        <h1>${onTrack ? "You're on track." : d.stats.needsOk ? `${plural(d.stats.needsOk, 'post needs', 'posts need')} your OK.` : 'A few slots need media.'}<br><span class="h1-strong">${d.stats.scheduled} of ${d.stats.total} ${d.month} posts are scheduled.</span></h1>
+      </div>
+      <button type="button" class="btn btn-primary" data-action="go" data-route="s-library">${icon('upload', 16)} Upload photos &amp; videos</button>
+    </header>
+    <section class="tiles" aria-label="Progress">
+      <div class="tile"><span class="tile-label">${d.month} posts scheduled</span><span class="tile-value">${d.stats.scheduled} / ${d.stats.total}</span><div class="bar" role="img" aria-label="${pct}% scheduled"><span style="width:${pct}%"></span></div></div>
+      <div class="tile"><span class="tile-label">Weeks on plan, in a row</span><span class="tile-value">${d.stats.weeks}</span></div>
+      <div class="tile"><span class="tile-label">Unused media in library</span><span class="tile-value">${d.stats.unused}</span></div>
+      <div class="tile tile-hi"><span class="tile-label">Needs your OK</span><span class="tile-value">${d.stats.needsOk}</span></div>
+    </section>
+    <div class="cols">
+      <section class="col-main" aria-labelledby="n7-h">
+        <h2 class="section-title" id="n7-h">Next 7 days</h2>
+        ${d.next7.length ? d.next7.map((p) => html`
+        <button type="button" class="card post-row" data-action="go" data-route="s-composer" data-id="${p.id}">
+          ${thumb(p.media, 'thumb-96')}
+          <span class="grow stack-xs">
+            <span class="mono-label info-text">${fdate(p.scheduled_at, { time: true })} · ${PLATFORM(p)}</span>
+            <span class="post-title">${p.title}</span>
+            <span class="muted small">${p.media?.kind === 'video' ? 'Video' : 'Photo'} · ${p.media?.subject || p.media?.label || ''} · "${(p.caption_ig || '').split('\n')[0].slice(0, 70)}${(p.caption_ig || '').split('\n')[0].length > 70 ? '…' : ''}"</span>
+          </span>
+          <span class="stack-xs end">${pillarChip(p.pillar)}${p.status === 'published' ? chip('Posted', 'good') : p.status === 'scheduled' ? chip('Scheduled', 'good') : p.blocking ? chip('Needs a fix', 'warn') : chip('Needs your OK', 'warn')}</span>
+        </button>`) : html`<div class="empty"><p>Nothing scheduled in the next 7 days.</p></div>`}
+      </section>
+      <aside class="col-side" aria-labelledby="ok-h">
+        <h2 class="section-title" id="ok-h">Needs your OK</h2>
+        ${d.flagged.map((f) => html`<div class="card note-card">
+          ${f.flags.map((x) => html`<span class="chip chip-warn">${x.check === 'consent' ? 'People in frame' : x.label}</span>`)}
+          <p class="small">${f.post.title} · ${fdate(f.post.scheduled_at, { weekday: true })}. ${f.flags[0]?.suggestion}</p>
+          <button type="button" class="link-btn" data-action="go" data-route="s-composer" data-id="${f.post.id}">Open post</button>
+        </div>`)}
+        ${d.clean ? html`<div class="card note-card"><span class="chip chip-good">${plural(d.clean, 'post')} passed every check</span>
+          <p class="small">Reviewer found nothing to fix. Approving schedules them; nothing goes live before its time.</p>
+          <div class="row gap-s wrap"><button type="button" class="btn btn-primary btn-sm" data-action="approveClean">Approve ${d.clean}</button><button type="button" class="link-btn" data-action="go" data-route="s-calendar">Review on calendar</button></div></div>` : ''}
+        ${d.open.length ? html`<div class="card note-card"><span class="chip chip-warn">${plural(d.open.length, 'open slot')}</span>
+          <p class="small">${d.open.map((o) => fdate(o.date, { weekday: false })).join(' and ')} ${d.open.length === 1 ? 'has' : 'have'} no media yet. The library is low on ${d.lowPillar} content, so upload a photo or two.</p>
+          <div class="row gap-s wrap"><button type="button" class="btn btn-sm" data-action="autofill">Auto-fill</button><button type="button" class="link-btn" data-action="go" data-route="s-calendar">View calendar</button></div></div>` : ''}
+        ${!d.flagged.length && !d.clean && !d.open.length ? html`<div class="card note-card"><p class="small">Nothing needs you right now.</p></div>` : ''}
+      </aside>
+    </div>`;
+  },
+  actions: {
+    async approveClean(el, app) {
+      const r = await app.call('approveCleanPosts', {});
+      toast(`${plural(r.approved, 'post')} scheduled`);
+      app.refresh();
+    },
+    async autofill(el, app) {
+      const r = await app.call('autofill', {});
+      toast(r.created ? `Drafted ${plural(r.created, 'post')}. ${r.open ? `${r.open} still open.` : ''}` : 'No unused media fits those slots. Upload some first.', r.created ? 'good' : 'info');
+      app.refresh();
+    },
+  },
+};
+
+// ---------------------------------------------------------------------------
+
+const library = {
+  title: 'Social · Media library',
+  load: (app) => app.call('library', { filter: app.pref('mediaFilter', 'all') }),
+  render(d, app) {
+    const f = app.pref('mediaFilter', 'all');
+    const sel = d.media.find((m) => m.id === app.sel('s-library')) || d.media[0];
+    return html`
+    <header class="page-head">
+      <div class="head-text"><span class="eyebrow">Media library · ${plural(d.total, 'item')}</span><h1>Load it in. The agent picks and schedules.</h1></div>
+      <button type="button" class="btn btn-primary" data-action="autofill"${d.open ? '' : ' disabled'}>Auto-schedule ${d.open ? plural(d.open, 'open slot') : 'open slots'}</button>
+    </header>
+    <label class="dropzone" data-drop="upload">
+      <span class="dz-icon">${icon('upload', 28)}</span>
+      <span class="grow stack-xs"><strong>Drop photos and videos here</strong><span class="muted small">JPG, PNG, HEIC, MP4 or MOV. The agent tags each one by content pillar and flags anything with people in frame.</span></span>
+      <span class="btn">Browse files</span>
+      <input type="file" multiple accept="image/*,video/*" class="sr-only" data-change="upload">
+    </label>
+    <div class="cols">
+      <section class="col-main" aria-label="Media">
+        <div class="filters" role="group" aria-label="Filter media">
+          ${[['all', 'All'], ['unused', 'Unused'], ['photos', 'Photos'], ['videos', 'Videos'], ['scheduled', 'Scheduled'], ['consent', 'Needs consent']].map(([k, l]) => html`<button type="button" aria-pressed="${f === k}" data-action="setPref" data-key="mediaFilter" data-value="${k}">${l}</button>`)}
+        </div>
+        <div class="media-grid">
+          ${d.media.map((m) => html`<button type="button" class="media-card ${sel && m.id === sel.id ? 'current' : ''}" data-action="selectMedia" data-id="${m.id}">
+            ${thumb(m)}
+            <span class="media-label">${m.label}</span>
+            <span class="media-foot">${pillarChip(m.pillar)}<span class="small ${m.uses.length ? 'good-text' : 'muted'}">${m.uses.length ? `Posts ${fdate(m.uses[0].when, { weekday: false })}` : 'Unused'}</span></span>
+          </button>`)}
+          ${!d.media.length ? html`<p class="muted">Nothing here yet.</p>` : ''}
+        </div>
+      </section>
+      ${sel ? html`<aside class="col-side card" aria-label="Selected item">
+        ${sel.thumb ? html`<img class="preview" src="${sel.thumb}" alt="${sel.subject || sel.label}">` : html`<div class="preview ph">${sel.kind === 'video' ? 'Video' : 'Photo'}${sel.duration_s ? ` · 0:${String(Math.round(sel.duration_s)).padStart(2, '0')}` : ''} · ${sel.label}</div>`}
+        <h2 class="section-title">What the agent sees</h2>
+        <dl class="dl">
+          <div><dt>Pillar</dt><dd><label class="sr-only" for="pillar-sel">Pillar</label><select id="pillar-sel" data-change="setPillar" data-id="${sel.id}">${PILLARS.map((p) => html`<option${p === sel.pillar ? ' selected' : ''}>${p}</option>`)}</select></dd></div>
+          <div><dt>Subject</dt><dd>${sel.subject || '—'}</dd></div>
+          <div><dt>Best format</dt><dd>${sel.format_fit || '—'}</dd></div>
+          <div><dt>Scheduled</dt><dd>${sel.uses.length ? sel.uses.map((u) => fdate(u.when, { time: true })).join('; ') : 'Not yet'}</dd></div>
+          <div><dt>People in frame</dt><dd class="${sel.needsConsent ? 'warn-text' : ''}">${sel.people_in_frame === false ? 'No' : sel.consent_confirmed ? `Yes · release on file${sel.release_location ? ` (${sel.release_location})` : ''}` : sel.people_in_frame ? 'Yes, confirm OK' : 'Not sure, confirm'}</dd></div>
+          <div><dt>Tagged by</dt><dd>${sel.tag_source === 'vision' ? 'Claude (vision)' : sel.tag_source === 'sample' ? 'Sample data' : 'Filename (connect Claude for vision tags)'}</dd></div>
+        </dl>
+        ${sel.needsConsent ? html`<div class="fixbox"><p class="small">${sel.people_note || 'Confirm there are no people, or that you hold a signed release.'}</p><div class="row gap-s wrap"><button type="button" class="btn btn-primary btn-sm" data-action="consent" data-id="${sel.id}">I have permission</button><button type="button" class="btn btn-sm" data-action="noPeople" data-id="${sel.id}">No people in it</button></div></div>` : ''}
+        <div class="row gap-s wrap">${sel.uses.length ? html`<button type="button" class="btn btn-primary" data-action="go" data-route="s-composer" data-id="${sel.uses[0].id}">Edit post</button>` : ''}<button type="button" class="btn" data-action="exclude" data-id="${sel.id}">Don't use</button></div>
+      </aside>` : ''}
+    </div>`;
+  },
+  actions: {
+    selectMedia(el, app) { app.setSel('s-library', el.dataset.id); app.refresh(); },
+    async autofill(el, app) { const r = await app.call('autofill', {}); toast(`Drafted ${plural(r.created, 'post')}${r.open ? `; ${r.open} still open` : ''}`); app.refresh(); },
+    async exclude(el, app) { await app.call('excludeMedia', { id: el.dataset.id }); toast("The agent won't use it"); app.refresh(); },
+    async consent(el, app) { await consentDialog(app, el.dataset.id); },
+    async noPeople(el, app) { await app.call('confirmConsent', { id: el.dataset.id, mode: 'no_people' }); toast('Marked: no people in frame'); app.refresh(); },
+  },
+  changes: {
+    async setPillar(el, app) { await app.call('updateMedia', { id: el.dataset.id, pillar: el.value }); toast('Pillar updated'); app.refresh(); },
+    upload: (el, app) => uploadFiles([...el.files], app),
+  },
+  drops: { upload: (files, app) => uploadFiles(files, app) },
+};
+
+async function uploadFiles(files, app) {
+  const list = files.filter((f) => /^(image|video)\//.test(f.type) || /\.(heic|mov|mp4)$/i.test(f.name));
+  if (!list.length) return toast('Choose photo or video files.', 'bad');
+  toast(`Tagging ${plural(list.length, 'file')}…`, 'info');
+  let last = null;
+  for (const file of list) {
+    const kind = file.type.startsWith('video') || /\.(mov|mp4)$/i.test(file.name) ? 'video' : 'photo';
+    const meta = kind === 'video' ? await readVideo(file) : await readImage(file);
+    const file_url = await app.upload(file);
+    last = await app.call('uploadMedia', { label: file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '), kind, file_url, ...meta });
+  }
+  if (last) app.setSel('s-library', last.id);
+  toast(`${plural(list.length, 'file')} added and tagged`);
+  app.refresh();
+}
+
+async function consentDialog(app, mediaId) {
+  const d = await dialog({
+    title: 'Confirm permission to post', submit: 'Confirm',
+    body: html`<p>People are visible in this media. Confirm that everyone shown (and a parent or guardian for anyone under 18) signed a release.</p>${field('Where the signed release is kept', 'release_location', { required: true, autofocus: true, placeholder: 'Drive › Releases › 2026' })}`,
+  });
+  if (!d) return;
+  await app.call('confirmConsent', { id: mediaId, mode: 'release', release_location: d.release_location });
+  toast('Release recorded. Reviewer re-checked every post using it.');
+  app.refresh();
+}
+
+// ---------------------------------------------------------------------------
+
+const composer = {
+  title: 'Social · Post composer',
+  async load(app) {
+    const d = await app.call('post', { id: app.sel('s-composer') });
+    if (d && d.post.id !== app.sel('s-composer')) app.setSel('s-composer', d.post.id);
+    return d;
+  },
+  render(d, app) {
+    if (!d) return html`<div class="empty"><h1>No posts yet</h1><button type="button" class="btn btn-primary" data-action="go" data-route="s-library">Open the media library</button></div>`;
+    const p = d.post;
+    const tab = app.pref('platformTab', 'instagram');
+    const blocking = d.results.filter((r) => r.result === 'flag' && r.blocking).length;
+    const consent = d.results.find((r) => r.check === 'consent' && r.result === 'flag');
+    const live = p.status === 'published';
+    const scheduled = p.status === 'scheduled';
+    const localInput = (() => { const c = ct(p.scheduled_at); const z = (n) => String(n).padStart(2, '0'); return `${c.y}-${z(c.m)}-${z(c.d)}T${z(c.h)}:${z(c.min)}`; })();
+    return html`
+    <header class="page-head">
+      <div class="head-text">
+        <button type="button" class="back" data-action="go" data-route="s-calendar">${icon('left', 16)} Back to calendar</button>
+        <h1 class="h1-sm">${p.title}</h1>
+        <span class="muted">Picked by the agent from your library · ${p.pillar} pillar${p.sample ? ' · sample' : ''}</span>
+      </div>
+      <div class="row gap-s wrap">
+        <button type="button" class="btn" data-action="showPillarIdeas" data-pillar="${p.pillar}">${icon('sparkle', 16)} Pillar Ideas</button>
+        ${!live ? html`<button type="button" class="btn" data-action="swapMedia" data-id="${p.id}">Swap media</button>` : ''}
+        ${live ? chip(`Posted ${fdate(p.published_at, { time: true })}${p.simulated ? ' (demo)' : ''}`, 'good')
+          : scheduled ? chip(`Scheduled · ${fdate(p.scheduled_at, { time: true })}`, 'good')
+            : html`<button type="button" class="btn btn-primary" data-action="approvePost" data-id="${p.id}"${blocking ? ' disabled' : ''}>Approve and schedule</button>`}
+      </div>
+    </header>
+    <div class="composer">
+      <section class="stack-s" aria-label="Media and timing">
+        ${p.media?.thumb ? html`<img class="preview tall" src="${p.media.thumb}" alt="${p.alt_text}">` : html`<div class="preview tall ph">${icon(p.media?.kind === 'video' ? 'video' : 'photo', 40)}<span>${p.media?.kind === 'video' ? `Video${p.media.duration_s ? ` · 0:${String(Math.round(p.media.duration_s)).padStart(2, '0')}` : ''} · 9:16` : 'Photo'}</span></div>`}
+        <form class="card card-flat stack-s" data-submit="saveTiming" data-id="${p.id}">
+          <div class="field"><label for="when">Goes live (Central)</label><input id="when" name="when" type="datetime-local" value="${localInput}"${live ? ' disabled' : ''}></div>
+          <label class="check"><input type="checkbox" name="instagram" value="1"${p.platforms.includes('instagram') ? ' checked' : ''}${live ? ' disabled' : ''}> Instagram ${p.media?.kind === 'video' ? 'Reel' : 'post'}</label>
+          <label class="check"><input type="checkbox" name="facebook" value="1"${p.platforms.includes('facebook') ? ' checked' : ''}${live ? ' disabled' : ''}> Facebook ${p.media?.kind === 'video' ? 'video' : 'post'}</label>
+          <label class="check"><input type="checkbox" name="time_sensitive" value="1"${p.time_sensitive ? ' checked' : ''}${live ? ' disabled' : ''}> Time-sensitive (skip when copying months)</label>
+          ${!live ? html`<button type="submit" class="btn btn-sm">Save timing</button>` : ''}
+        </form>
+      </section>
+      <section class="card editor-card" aria-label="Caption">
+        <div class="filters" role="tablist" aria-label="Platform">
+          <button type="button" role="tab" aria-selected="${tab === 'instagram'}" aria-pressed="${tab === 'instagram'}" data-action="setPref" data-key="platformTab" data-value="instagram">Instagram</button>
+          <button type="button" role="tab" aria-selected="${tab === 'facebook'}" aria-pressed="${tab === 'facebook'}" data-action="setPref" data-key="platformTab" data-value="facebook">Facebook</button>
+        </div>
+        <label class="sr-only" for="caption">${tab === 'instagram' ? 'Instagram' : 'Facebook'} caption</label>
+        <textarea id="caption" class="editor caption" rows="13" data-field="${tab === 'instagram' ? 'caption_ig' : 'caption_fb'}" data-input="count" data-limit="${tab === 'instagram' ? 2200 : 63206}"${live ? ' readonly' : ''}>${tab === 'instagram' ? p.caption_ig : p.caption_fb}</textarea>
+        <div class="row between"><span class="counter" id="counter" data-limit="${tab === 'instagram' ? 2200 : 63206}">${(tab === 'instagram' ? p.caption_ig : p.caption_fb).length.toLocaleString('en-US')} / ${tab === 'instagram' ? '2,200' : '63,206'}</span>${!live ? html`<button type="button" class="btn btn-sm" data-action="rewrite" data-id="${p.id}">${icon('refresh', 16)} Rewrite</button>` : ''}</div>
+        <div class="field"><label for="alt">Alt text</label><input id="alt" value="${p.alt_text}"${live ? ' readonly' : ''}></div>
+        <div class="row between wrap gap-s">${sourcesRow(d.citations)}${!live ? html`<button type="button" class="btn btn-primary btn-sm" data-action="savePost" data-id="${p.id}">Save and re-check</button>` : ''}</div>
+      </section>
+      <aside class="card reviewer" aria-labelledby="rev-h">
+        <div class="stack-xs"><h2 class="section-title" id="rev-h">Reviewer</h2><span class="muted small">Checked before anything posts</span></div>
+        ${checksList(d.results)}
+        ${d.approval ? html`<p class="small">${stateChip(d.approval.state)}</p>` : ''}
+        ${consent ? html`<div class="fixbox"><p>${consent.suggestion}</p><div class="row gap-s wrap"><button type="button" class="btn btn-primary btn-sm" data-action="consent" data-id="${p.media_id}">I have permission</button><button type="button" class="btn btn-sm" data-action="swapMedia" data-id="${p.id}">Swap clip</button></div></div>` : ''}
+        ${fixBoxes(d.results.filter((r) => r.check !== 'consent'))}
+      </aside>
+    </div>`;
+  },
+  actions: {
+    async showPillarIdeas(el, app) {
+      const pillar = el.dataset.pillar || 'Educate';
+      const res = await app.call('getSocialIdeas', { pillar });
+      await dialog({
+        title: `Content Ideas · ${pillar} Pillar`,
+        submit: '',
+        cancel: 'Close',
+        wide: true,
+        body: html`
+          <p class="muted small mb-m">High-engagement prompt angles for <strong>${pillar}</strong>:</p>
+          <div class="stack-s">
+            ${res.ideas.map((idea) => html`
+              <div class="card card-flat">
+                <strong>${idea.title}</strong>
+                <p class="small mt-xs">${idea.prompt}</p>
+              </div>
+            `)}
+          </div>
+        `,
+      });
+    },
+    async savePost(el, app) {
+      const cap = document.getElementById('caption');
+      await app.call('updatePost', { id: el.dataset.id, [cap.dataset.field]: cap.value, alt_text: document.getElementById('alt').value });
+      toast('Saved. Reviewer checked it again.');
+      app.refresh();
+    },
+    async approvePost(el, app) { await app.call('approvePost', { id: el.dataset.id }); toast('Approved and scheduled'); app.refresh(); },
+    async swapMedia(el, app) { await app.call('swapMedia', { id: el.dataset.id }); toast('Swapped to media without people in frame'); app.refresh(); },
+    async rewrite(el, app) { await app.call('rewriteCaption', { id: el.dataset.id }); toast('Fresh caption drafted'); app.refresh(); },
+    async applyFix(el, app) { await app.call('applyFix', { resultId: el.dataset.id }); toast('Applied'); app.refresh(); },
+    focusEditor() { document.getElementById('caption')?.focus(); },
+    consent: (el, app) => consentDialog(app, el.dataset.id),
+  },
+  submits: {
+    async saveTiming(data, app, form) {
+      const platforms = [data.instagram && 'instagram', data.facebook && 'facebook'].filter(Boolean);
+      const [d, t] = data.when.split('T');
+      const [y, mo, da] = d.split('-').map(Number);
+      const [h, mi] = t.split(':').map(Number);
+      const { centralToDate } = await import('../core/util.js');
+      await app.call('updatePost', { id: form.dataset.id, platforms, time_sensitive: !!data.time_sensitive, scheduled_at: centralToDate(y, mo, da, h, mi).toISOString() });
+      toast('Timing saved');
+      app.refresh();
+    },
+  },
+};
+
+// ---------------------------------------------------------------------------
+
+const calendar = {
+  title: 'Social · Calendar',
+  load: (app) => app.call('calendar', { key: app.pref('calMonth', null) }),
+  render(d) {
+    const [y, m] = d.key.split('-').map(Number);
+    const lead = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+    const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const bySlot = new Map(d.slots.map((s) => [s.day, s]));
+    const offPlan = new Map();
+    for (const p of d.offPlan) { const c = ct(p.scheduled_at); (offPlan.get(c.d) || offPlan.set(c.d, []).get(c.d)).push(p); }
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push(html`<div class="cal-cell blank" aria-hidden="true"></div>`);
+    for (let day = 1; day <= days; day++) {
+      const s = bySlot.get(day);
+      const posts = [...(s?.posts || []), ...(offPlan.get(day) || [])];
+      cells.push(html`<div class="cal-cell ${s ? 'slot' : ''} ${s?.past ? 'past' : ''}">
+        <span class="cal-day">${day}</span>
+        ${posts.map((p) => html`<button type="button" class="cal-chip ${p.pillar ? 'p-' + p.pillar.toLowerCase() : ''}" data-action="go" data-route="s-composer" data-id="${p.id}">
+          <span class="cal-time">${(() => { const c = ct(p.scheduled_at); return time12(c.h, c.min).replace(':00', ''); })()} · ${p.platforms.length === 2 ? 'IG + FB' : p.platforms[0] === 'instagram' ? 'IG' : 'FB'}</span>
+          <span>${p.title}</span>
+          ${p.status === 'published' ? html`<span class="cal-state">${icon('check', 12)} Posted</span>` : p.status === 'scheduled' ? html`<span class="cal-state">${icon('check', 12)} Scheduled</span>` : html`<span class="cal-state">${icon('alert', 12)} ${p.blocking ? 'Fix' : 'Needs OK'}</span>`}
+        </button>`)}
+        ${s && !posts.length && !s.past ? html`<button type="button" class="cal-open" data-action="fillSlot" data-slot="${s.key}">Open slot · needs media</button>` : ''}
+      </div>`);
+    }
+    return html`
+    <header class="page-head cal-head">
+      <div class="row gap-s wrap">
+        <button type="button" class="icon-btn round" aria-label="Previous month" data-action="setPref" data-key="calMonth" data-value="${d.prev}">${icon('left')}</button>
+        <h1 class="h1-cal">${d.label}</h1>
+        <button type="button" class="icon-btn round" aria-label="Next month" data-action="setPref" data-key="calMonth" data-value="${d.next}">${icon('right')}</button>
+        <span class="mono-label">Plan: Mon · Wed · Fri · ${d.filled} of ${d.total} filled</span>
+      </div>
+      <div class="row gap-s wrap">
+        <button type="button" class="btn" data-action="go" data-route="s-copy">${icon('copy', 16)} Copy month</button>
+        <button type="button" class="btn btn-primary" data-action="autofillMonth" data-key="${d.key}"${d.open ? '' : ' disabled'}>Auto-fill ${d.open ? plural(d.open, 'open slot') : 'open slots'}</button>
+      </div>
+    </header>
+    <div class="legend">${d.pillars.map((p) => pillarChip(p))}</div>
+    <div class="cal-wrap"><div class="cal" role="grid" aria-label="${d.label}">
+      ${['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((w) => html`<span class="cal-wd" role="columnheader">${w}</span>`)}
+      ${cells}
+    </div></div>`;
+  },
+  actions: {
+    async autofillMonth(el, app) { const r = await app.call('autofill', { key: el.dataset.key }); toast(r.created ? `Drafted ${plural(r.created, 'post')}${r.open ? `; ${r.open} still open` : ''}` : 'No unused media fits. Upload some first.', r.created ? 'good' : 'info'); app.refresh(); },
+    async fillSlot(el, app) { const r = await app.call('autofill', { key: el.dataset.slot.slice(0, 7), only: el.dataset.slot }); toast(r.created ? 'Drafted a post for that slot' : 'No unused media fits that slot yet.', r.created ? 'good' : 'info'); app.refresh(); },
+  },
+};
+
+// ---------------------------------------------------------------------------
+
+const copyMonth = {
+  title: 'Social · Copy month',
+  async load(app) {
+    const cal = await app.call('calendar', { key: app.pref('calMonth', null) });
+    const o = app.pref('copyOpts', null) || {};
+    const next = cal.next;
+    const opts = {
+      source_month: cal.key,
+      target: o.target || next,
+      match_by: o.match_by || 'weekday',
+      media_mode: o.media_mode || 'fresh',
+      refresh_captions: o.refresh_captions ?? true,
+      skip_time_sensitive: o.skip_time_sensitive ?? true,
+    };
+    const targets = opts.target === 'next3' ? [1, 2, 3].map((i) => addMonthsKey(cal.key, i)) : [opts.target];
+    const preview = await app.call('copyMonthPreview', { ...opts, target_months: targets });
+    return { cal, opts, preview, next };
+  },
+  render(d) {
+    const { cal, opts, preview } = d;
+    const src = monthName(cal.key);
+    const p = preview.plans[0];
+    const total = preview.plans.reduce((s, x) => ({ slots: s.slots + x.slots, posts: s.posts + x.posts, open: s.open + x.open }), { slots: 0, posts: 0, open: 0 });
+    const where = opts.target === 'next3' ? 'each of the next 3 months' : monthName(opts.target);
+    const nextKeys = [1, 2].map((i) => addMonthsKey(cal.key, i));
+    const srcFilled = cal.slots.filter((s) => s.posts.length).length;
+    return html`
+    <section class="copy card" aria-labelledby="copy-title">
+      <span class="eyebrow">Repost a proven plan</span>
+      <h1 id="copy-title" class="h1-sm">Copy ${src}'s schedule</h1>
+      <p class="muted">${cal.total} slots on a Mon · Wed · Fri plan, ${srcFilled} with posts.</p>
+      <form class="stack-m" data-submit="doCopy" data-change-form="copyOpts">
+        <div class="field"><label for="target">Copy to</label><select id="target" name="target">
+          ${nextKeys.map((k) => html`<option value="${k}"${opts.target === k ? ' selected' : ''}>${monthName(k)} ${k.slice(0, 4)}</option>`)}
+          <option value="next3"${opts.target === 'next3' ? ' selected' : ''}>Next 3 months</option></select></div>
+        <fieldset class="fieldset"><legend>Line up posts by</legend>
+          <label class="radio-card ${opts.match_by === 'weekday' ? 'on' : ''}"><input type="radio" name="match_by" value="weekday"${opts.match_by === 'weekday' ? ' checked' : ''}><span><strong>Same weekday pattern</strong><span class="muted small">First Monday stays a Monday. Best for keeping your Mon · Wed · Fri rhythm.</span></span></label>
+          <label class="radio-card ${opts.match_by === 'date' ? 'on' : ''}"><input type="radio" name="match_by" value="date"${opts.match_by === 'date' ? ' checked' : ''}><span><strong>Same dates</strong><span class="muted small">${src.slice(0, 3)} 5 becomes the 5th of the new month, whatever day that is.</span></span></label>
+        </fieldset>
+        <fieldset class="fieldset"><legend>Photos and videos</legend>
+          <label class="check"><input type="radio" name="media_mode" value="fresh"${opts.media_mode === 'fresh' ? ' checked' : ''}> Let the agent pick fresh media with the same pillar</label>
+          <label class="check"><input type="radio" name="media_mode" value="same"${opts.media_mode === 'same' ? ' checked' : ''}> Repost the exact same media</label>
+        </fieldset>
+        <label class="check"><input type="checkbox" name="refresh_captions" value="1"${opts.refresh_captions ? ' checked' : ''}> Refresh captions so they don't repeat word for word</label>
+        <label class="check"><input type="checkbox" name="skip_time_sensitive" value="1"${opts.skip_time_sensitive ? ' checked' : ''}> Skip time-sensitive posts (events, deadlines)</label>
+        <div class="summary-box" aria-live="polite">
+          <strong>Creates ${total.slots} slots in ${where}: ${plural(total.posts, 'post')} and ${plural(total.open, 'open slot')}${p.skipped.length ? ` (skips ${p.skipped.map((s) => `"${s}"`).join(', ')})` : ''}.</strong><br>
+          ${opts.media_mode === 'fresh' ? 'The agent picks new photos and videos from your library to match each pillar.' : 'The same photos and videos go out again.'}
+          ${opts.refresh_captions ? ' Captions get a light rewrite.' : ' Captions stay exactly the same.'}
+          ${opts.match_by === 'date' ? ' Posts may land on different weekdays.' : ''}
+          ${p.dropped.length ? html`<br><span class="muted small">Not copied: ${p.dropped.map((x) => `${x.title} (${x.why.toLowerCase()})`).join('; ')}.</span>` : ''}
+          <br><span class="muted small">Copied posts land as drafts and still need your OK.</span>
+        </div>
+        <div class="row gap-s"><button type="button" class="btn" data-action="go" data-route="s-calendar">Cancel</button><button type="submit" class="btn btn-primary"${total.posts ? '' : ' disabled'}>${opts.target === 'next3' ? 'Copy to next 3 months' : `Copy to ${monthName(opts.target)}`}</button></div>
+      </form>
+    </section>`;
+  },
+  submits: {
+    async doCopy(data, app) {
+      const cal = await app.call('calendar', { key: app.pref('calMonth', null) });
+      const targets = data.target === 'next3' ? [1, 2, 3].map((i) => addMonthsKey(cal.key, i)) : [data.target];
+      const r = await app.call('copyMonth', { source_month: cal.key, target_months: targets, match_by: data.match_by, media_mode: data.media_mode, refresh_captions: !!data.refresh_captions, skip_time_sensitive: !!data.skip_time_sensitive });
+      toast(`${plural(r.created, 'post')} drafted. They need your OK before they go live.`);
+      app.setPref('calMonth', targets[0]);
+      app.go('s-calendar');
+    },
+  },
+  formChanges: {
+    copyOpts(data, app) {
+      app.setPref('copyOpts', { target: data.target, match_by: data.match_by, media_mode: data.media_mode, refresh_captions: !!data.refresh_captions, skip_time_sensitive: !!data.skip_time_sensitive });
+      app.refresh();
+    },
+  },
+};
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function monthName(key) { return MONTHS[+key.split('-')[1] - 1]; }
+function addMonthsKey(key, n) {
+  const [y, m] = key.split('-').map(Number);
+  const i = y * 12 + m - 1 + n;
+  return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`;
+}
+
+export default {
+  's-week': week,
+  's-library': library,
+  's-composer': composer,
+  's-calendar': calendar,
+  's-copy': copyMonth,
+};
+
+export { when };
