@@ -420,6 +420,114 @@ export function createService({ store, llm = { available: false }, integrations 
   });
   def('addContact', 'user', ({ prospectId, ...c }, ctx) => O.addContact(ctx, prospectId, c));
   def('updateContact', 'user', ({ id, ...patch }, ctx) => O.updateContact(ctx, id, patch));
+  def('upsertContact', 'user', (data, ctx) => O.upsertContactRecord(ctx, data));
+  def('deleteContact', 'user', ({ id }, ctx) => O.deleteContactRecord(ctx, id));
+  def('logContactCommunication', 'user', ({ contactId, ...entry }, ctx) => O.logContactCommunication(ctx, contactId, entry));
+  def('setContactFollowUp', 'user', ({ contactId, ...params }, ctx) => O.setContactFollowUp(ctx, contactId, params));
+  def('syncGmailContacts', 'user', (params, ctx) => O.syncGmailContacts(ctx, params || {}));
+
+  def('contactsList', 'user', ({ search = '', segment = 'all', status = 'all', sort = 'followup' } = {}) => {
+    let list = store.all('contacts');
+    const now = new Date();
+
+    // Enrich contacts with prospect and partnership data
+    list = list.map((c) => {
+      const prospect = c.prospect_id ? store.get('prospects', c.prospect_id) : null;
+      const partnership = c.prospect_id ? store.find('partnerships', (p) => p.prospect_id === c.prospect_id) : null;
+      const history = Array.isArray(c.history) ? c.history : [];
+      return {
+        ...c,
+        company: c.company || c.organization || prospect?.name || 'Community Partner',
+        position: c.position || c.title || 'Staff Contact',
+        segment: c.segment || prospect?.segment || 'agency',
+        segment_label: SEGMENTS[c.segment || prospect?.segment || 'agency']?.label || 'Agency',
+        prospect,
+        partnership,
+        history_count: history.length,
+      };
+    });
+
+    // Filter by search query
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((c) => (
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.email || '').toLowerCase().includes(q) ||
+        (c.phone || '').toLowerCase().includes(q) ||
+        (c.company || '').toLowerCase().includes(q) ||
+        (c.position || '').toLowerCase().includes(q) ||
+        (c.notes || '').toLowerCase().includes(q)
+      ));
+    }
+
+    // Filter by segment
+    if (segment && segment !== 'all') {
+      const match = { school: ['school'], faith: ['faith', 'youth'], library: ['library', 'agency'], business: ['business'] }[segment];
+      list = list.filter((c) => (match ? match.includes(c.segment) : c.segment === segment));
+    }
+
+    // Filter by status
+    if (status && status !== 'all') {
+      if (status === 'needs_followup') {
+        list = list.filter((c) => c.status_of_last_request === 'Needs Follow-up' || (c.next_follow_up_date && new Date(c.next_follow_up_date) <= now));
+      } else {
+        list = list.filter((c) => (c.status_of_last_request || '').toLowerCase() === status.toLowerCase());
+      }
+    }
+
+    // Sort list
+    if (sort === 'followup') {
+      list.sort((a, b) => (a.next_follow_up_date || '9999').localeCompare(b.next_follow_up_date || '9999'));
+    } else if (sort === 'last_comm_newest') {
+      list.sort((a, b) => (b.last_communication || '').localeCompare(a.last_communication || ''));
+    } else if (sort === 'last_comm_oldest') {
+      list.sort((a, b) => (a.last_communication || '9999').localeCompare(b.last_communication || '9999'));
+    } else if (sort === 'name') {
+      list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    } else if (sort === 'company') {
+      list.sort((a, b) => (a.company || '').localeCompare(b.company || ''));
+    }
+
+    const allContacts = store.all('contacts');
+    const counts = {
+      total: allContacts.length,
+      needs_followup: allContacts.filter((c) => c.status_of_last_request === 'Needs Follow-up' || (c.next_follow_up_date && new Date(c.next_follow_up_date) <= now)).length,
+      awaiting_reply: allContacts.filter((c) => c.status_of_last_request === 'Awaiting Reply').length,
+      active_partners: allContacts.filter((c) => c.status_of_last_request === 'Active Partner' || c.status_of_last_request === 'Access Point Active').length,
+    };
+
+    return {
+      contacts: list,
+      counts,
+      segments: SEGMENTS,
+      lastSync: store.settings().last_gmail_sync || null,
+      gmailConnected: !!integrations.gmail?.available,
+    };
+  });
+
+  def('contactDetails', 'user', ({ id }) => {
+    const c = store.get('contacts', id);
+    if (!c) throw Object.assign(new Error('Contact not found'), { status: 404 });
+    const prospect = c.prospect_id ? store.get('prospects', c.prospect_id) : null;
+    const partnership = c.prospect_id ? store.find('partnerships', (p) => p.prospect_id === c.prospect_id) : null;
+    const messages = c.prospect_id ? store.all('messages', (m) => m.prospect_id === c.prospect_id).sort((a, b) => a.sequence_step - b.sequence_step) : [];
+    const history = (c.history || []).slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    return {
+      contact: {
+        ...c,
+        company: c.company || c.organization || prospect?.name || 'Community Partner',
+        position: c.position || c.title || 'Staff Contact',
+        segment: c.segment || prospect?.segment || 'agency',
+        segment_label: SEGMENTS[c.segment || prospect?.segment || 'agency']?.label || 'Agency',
+      },
+      prospect,
+      partnership,
+      messages,
+      history,
+    };
+  });
+
   def('notNow', 'user', ({ prospectId }, ctx) => {
     const after = store.update('prospects', prospectId, { status: 'not_now' });
     audit(store, { actor: ctx.actor, action: 'prospect.not_now', item_type: 'prospect', item_id: prospectId });
@@ -678,7 +786,22 @@ export function createService({ store, llm = { available: false }, integrations 
       }
     }
 
-    // Prospects & Contacts
+    // Contacts & CRM
+    for (const c of store.all('contacts')) {
+      const ctext = `${c.name} ${c.title} ${c.position} ${c.email} ${c.phone} ${c.company} ${c.notes}`.toLowerCase();
+      if (ctext.includes(q)) {
+        results.push({
+          type: 'contact',
+          id: c.id,
+          title: c.name || 'Contact',
+          sub: `${c.position || c.title || 'Staff'} · ${c.company || 'Partner'} ${c.email ? `· ${c.email}` : ''}`,
+          route: 'o-contacts',
+          score: (c.name || '').toLowerCase().includes(q) ? 10 : 6,
+        });
+      }
+    }
+
+    // Prospects
     for (const p of store.all('prospects')) {
       const contacts = store.all('contacts', (c) => c.prospect_id === p.id);
       const ctext = contacts.map((c) => `${c.name} ${c.title} ${c.email}`).join(' ');

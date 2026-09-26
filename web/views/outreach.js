@@ -367,8 +367,504 @@ const board = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Contacts & CRM with Daily Gmail Synchronization
+// ---------------------------------------------------------------------------
+
+const contacts = {
+  title: 'Outreach · Contacts & CRM',
+  load: async (app) => {
+    const search = app.pref('contact_search', '');
+    const segment = app.pref('contact_segment', 'all');
+    const status = app.pref('contact_status', 'all');
+    const sort = app.pref('contact_sort', 'followup');
+    const data = await app.call('contactsList', { search, segment, status, sort });
+    let selId = app.sel('o-contacts');
+    if (!selId || !data.contacts.some((c) => c.id === selId)) {
+      selId = data.contacts[0]?.id || null;
+      if (selId) app.setSel('o-contacts', selId);
+    }
+    const details = selId ? await app.call('contactDetails', { id: selId }) : null;
+    return { ...data, selected: details, selId, search, segment, status, sort };
+  },
+  render(d, app) {
+    const sel = d.selected?.contact;
+    const now = new Date();
+
+    const formatFollowup = (dateStr) => {
+      if (!dateStr) return { text: 'No follow-up set', cls: 'normal' };
+      const target = new Date(dateStr);
+      const diffDays = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) return { text: `⚠️ Overdue by ${Math.abs(diffDays)}d (${fdate(dateStr, { weekday: false })})`, cls: 'urgent' };
+      if (diffDays === 0) return { text: `🔔 Due today!`, cls: 'urgent' };
+      if (diffDays === 1) return { text: `🔔 Due tomorrow`, cls: 'upcoming' };
+      if (diffDays <= 7) return { text: `📅 Due in ${diffDays}d (${fdate(dateStr, { weekday: false })})`, cls: 'upcoming' };
+      return { text: `📅 ${fdate(dateStr, { weekday: false })}`, cls: 'normal' };
+    };
+
+    const statusBadge = (st) => {
+      const s = st || 'New';
+      if (s === 'Needs Follow-up') return chip(s, 'bad');
+      if (s === 'Replied' || s === 'Access Point Active') return chip(s, 'good');
+      if (s === 'Meeting Booked' || s === 'Meeting Scheduled' || s === 'Active Partner') return chip(s, 'good');
+      if (s === 'Awaiting Reply' || s === 'Proposal Sent') return chip(s, 'info');
+      return chip(s, 'warn');
+    };
+
+    return html`
+    <header class="page-head">
+      <div class="head-text">
+        <span class="eyebrow">Outreach Studio · Contacts & CRM</span>
+        <h1>Partner & Community Directory</h1>
+        <p class="lede">Daily Gmail sync automatically organizes community contacts, tracks first and last communication timelines, manages request statuses, and highlights follow-ups.</p>
+      </div>
+      <div class="row gap-s wrap">
+        <button type="button" class="btn" data-action="syncGmail">${icon('sparkle', 16)} Sync Gmail Now</button>
+        <button type="button" class="btn" data-action="exportCsv">${icon('download', 16)} Export CSV</button>
+        <button type="button" class="btn btn-primary" data-action="newContact">${icon('plus', 16)} Add Contact</button>
+      </div>
+    </header>
+
+    <section class="tiles" aria-label="CRM Overview">
+      <div class="tile"><span class="tile-label">Total Directory Contacts</span><span class="tile-value">${d.counts.total}</span></div>
+      <div class="tile ${d.counts.needs_followup > 0 ? 'tile-hi' : ''}"><span class="tile-label">Needs Follow-Up / Overdue</span><span class="tile-value">${d.counts.needs_followup}</span></div>
+      <div class="tile"><span class="tile-label">Awaiting Partner Reply</span><span class="tile-value">${d.counts.awaiting_reply}</span></div>
+      <div class="tile"><span class="tile-label">Active Partners & Access Points</span><span class="tile-value">${d.counts.active_partners}</span></div>
+    </section>
+
+    <div class="row gap-m wrap between center mb-s">
+      <div class="filters" role="group" aria-label="Filter by segment">
+        ${[['all', 'All Segments'], ['school', 'Schools'], ['faith', 'Faith & Youth'], ['library', 'Libraries & Agencies'], ['business', 'Businesses']].map(([k, l]) => html`
+          <button type="button" aria-pressed="${d.segment === k}" data-action="setPref" data-key="contact_segment" data-value="${k}">${l}</button>
+        `)}
+      </div>
+      <div class="row gap-s center">
+        <label for="sort-select" class="small muted">Sort by:</label>
+        <select id="sort-select" data-change="setSort">
+          <option value="followup"${d.sort === 'followup' ? ' selected' : ''}>Next follow-up (Soonest first)</option>
+          <option value="last_comm_newest"${d.sort === 'last_comm_newest' ? ' selected' : ''}>Last communication (Newest)</option>
+          <option value="last_comm_oldest"${d.sort === 'last_comm_oldest' ? ' selected' : ''}>Last communication (Oldest)</option>
+          <option value="name"${d.sort === 'name' ? ' selected' : ''}>Contact Name (A–Z)</option>
+          <option value="company"${d.sort === 'company' ? ' selected' : ''}>Organization (A–Z)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="filters mb-m" role="group" aria-label="Filter by status">
+      ${[['all', 'All Statuses'], ['needs_followup', 'Needs Follow-up'], ['Awaiting Reply', 'Awaiting Reply'], ['Replied', 'Replied'], ['Meeting Booked', 'Meeting Booked'], ['Access Point Active', 'Active Partner']].map(([k, l]) => html`
+        <button type="button" aria-pressed="${d.status === k}" data-action="setPref" data-key="contact_status" data-value="${k}">${l}</button>
+      `)}
+    </div>
+
+    <div class="crm-layout">
+      <!-- Left Column: Directory List -->
+      <aside class="crm-sidebar" aria-label="Contacts list">
+        <div class="crm-search-box">
+          <span class="search-ic">${icon('search', 16)}</span>
+          <input type="search" placeholder="Search by name, email, phone, company…" value="${d.search}" data-input="onSearch">
+        </div>
+
+        <div class="crm-list" role="listbox">
+          ${d.contacts.length ? d.contacts.map((c) => {
+            const fu = formatFollowup(c.next_follow_up_date);
+            const isSel = c.id === d.selId;
+            return html`
+            <article class="crm-card ${isSel ? 'active' : ''}" role="option" aria-selected="${isSel}" data-action="selectContact" data-id="${c.id}">
+              <div class="crm-card-header">
+                <div class="stack-xs" style="min-width:0;">
+                  <span class="crm-contact-name">${c.name || 'Unnamed Contact'}</span>
+                  <span class="crm-contact-title">${c.position || c.title || 'Staff'} · <strong>${c.company || 'Community Partner'}</strong></span>
+                </div>
+                ${statusBadge(c.status_of_last_request)}
+              </div>
+
+              <div class="crm-card-meta">
+                ${c.email ? html`<span class="src"><a href="mailto:${c.email}" onclick="event.stopPropagation();" title="Email ${c.email}">${icon('mail', 14)} ${c.email}</a></span>` : ''}
+                ${c.phone ? html`<span class="src"><a href="tel:${c.phone.replace(/[^0-9+]/g, '')}" onclick="event.stopPropagation();" title="Call ${c.phone}">${icon('phone', 14)} ${c.phone}</a></span>` : ''}
+                <span class="tagline">${c.segment_label || c.segment}</span>
+              </div>
+
+              ${c.last_snippet ? html`<div class="crm-card-comm"><span class="muted">${c.last_direction === 'inbound' ? '← Inbound:' : '→ Outbound:'}</span> ${c.last_snippet}</div>` : ''}
+
+              <div class="crm-card-followup ${fu.cls}">
+                <span>${fu.text}</span>
+                ${c.follow_up_next_steps ? html`<span class="muted font-normal">· ${c.follow_up_next_steps}</span>` : ''}
+              </div>
+            </article>`;
+          }) : html`<div class="empty"><p>No contacts found matching criteria.</p><button type="button" class="btn" data-action="newContact">Add a new contact</button></div>`}
+        </div>
+      </aside>
+
+      <!-- Right Column: Selected Contact Dossier -->
+      <main class="crm-detail-pane" aria-label="Contact details">
+        ${sel ? html`
+        <article class="card crm-profile-card">
+          <div class="crm-profile-top">
+            <div class="stack-xs">
+              <div class="row gap-s center">
+                <span class="mono-label">${sel.segment_label || sel.segment} · Partner Contact</span>
+                ${statusBadge(sel.status_of_last_request)}
+              </div>
+              <h2 class="crm-profile-name">${sel.name || 'Unnamed Contact'}</h2>
+              <div class="crm-profile-role">${sel.position || sel.title || 'Staff Contact'} at <strong>${sel.company || 'Community Organization'}</strong></div>
+            </div>
+            <div class="row gap-s wrap">
+              <button type="button" class="btn btn-sm" data-action="editContact" data-id="${sel.id}">${icon('edit', 14)} Edit Info</button>
+              <button type="button" class="btn btn-sm" data-action="logInteraction" data-id="${sel.id}">${icon('plus', 14)} Log Note/Call</button>
+              ${sel.email ? html`<a class="btn btn-sm btn-primary" href="mailto:${sel.email}?subject=Hope%20Resuscitated%20Partnership">${icon('mail', 14)} Compose Email</a>` : ''}
+              <button type="button" class="btn btn-sm btn-ghost" data-action="deleteContact" data-id="${sel.id}" title="Delete contact">${icon('trash', 14)}</button>
+            </div>
+          </div>
+
+          <div class="crm-info-grid">
+            <div class="crm-info-item">
+              <span class="crm-info-label">Direct Email</span>
+              <div class="row gap-xs center">
+                <span class="crm-info-value">${sel.email || 'No email on file'}</span>
+                ${sel.email ? html`<button type="button" class="icon-btn-text" data-action="copy" data-text="${sel.email}" title="Copy email">${icon('copy', 14)}</button>` : ''}
+              </div>
+            </div>
+            <div class="crm-info-item">
+              <span class="crm-info-label">Phone Number</span>
+              <div class="row gap-xs center">
+                <span class="crm-info-value">${sel.phone || 'No phone on file'}</span>
+                ${sel.phone ? html`<button type="button" class="icon-btn-text" data-action="copy" data-text="${sel.phone}" title="Copy phone">${icon('copy', 14)}</button>` : ''}
+              </div>
+            </div>
+            <div class="crm-info-item">
+              <span class="crm-info-label">Organization</span>
+              <span class="crm-info-value">${sel.company || '—'}</span>
+            </div>
+            <div class="crm-info-item">
+              <span class="crm-info-label">Role & Position</span>
+              <span class="crm-info-value">${sel.position || sel.title || '—'}</span>
+            </div>
+          </div>
+
+          <!-- Communication & Status Overview -->
+          <div class="crm-status-box">
+            <div class="card stack-xs" style="background:var(--ground); border:1px solid var(--line);">
+              <span class="mono-label">First Communication</span>
+              <strong>${sel.first_communication ? fdate(sel.first_communication) : '—'}</strong>
+              <p class="muted small">${sel.first_subject || 'Initial introductory contact'}</p>
+            </div>
+            <div class="card stack-xs" style="background:var(--ground); border:1px solid var(--line);">
+              <span class="mono-label">Last Communication (${sel.last_direction === 'inbound' ? 'Inbound' : 'Outbound'})</span>
+              <strong>${sel.last_communication ? fdate(sel.last_communication) : '—'}</strong>
+              <p class="small" style="line-height:1.4;">${sel.last_snippet || 'No message snippet'}</p>
+            </div>
+          </div>
+
+          <!-- Follow-up & Next Action Scheduler -->
+          <div class="card stack-s" style="border-left: 4px solid var(--signal-strong);">
+            <div class="row gap-s between center wrap">
+              <div class="stack-xs">
+                <span class="mono-label">Follow-up & Next Action</span>
+                <h3 class="section-title">Next Contact Steps</h3>
+              </div>
+              <div class="row gap-xs wrap">
+                <button type="button" class="btn btn-sm" data-action="snooze" data-id="${sel.id}" data-days="2">+2 Days</button>
+                <button type="button" class="btn btn-sm" data-action="snooze" data-id="${sel.id}" data-days="7">+1 Week</button>
+                <button type="button" class="btn btn-sm" data-action="snooze" data-id="${sel.id}" data-days="14">+2 Weeks</button>
+              </div>
+            </div>
+
+            <form data-submit="updateFollowup" data-id="${sel.id}" class="stack-s">
+              <div class="form-grid">
+                ${field('Target Follow-Up Date', 'next_follow_up_date', { type: 'date', value: sel.next_follow_up_date || '' })}
+                ${field('Status of Last Request', 'status_of_last_request', {
+                  options: [
+                    ['Needs Follow-up', 'Needs Follow-up'],
+                    ['Awaiting Reply', 'Awaiting Reply'],
+                    ['Replied', 'Replied (Review response)'],
+                    ['Meeting Booked', 'Meeting Booked / Scheduled'],
+                    ['Proposal Sent', 'Proposal Sent'],
+                    ['Access Point Active', 'Active Partner / Access Point Active'],
+                    ['Opt-Out', 'Opted Out / Do Not Contact'],
+                    ['New', 'New Contact'],
+                  ],
+                  value: sel.status_of_last_request || 'Awaiting Reply',
+                })}
+              </div>
+              ${field('Next Steps / Action Plan', 'follow_up_next_steps', { value: sel.follow_up_next_steps || 'Send follow-up email regarding naloxone partnership', placeholder: 'What needs to happen next?' })}
+              <div class="row gap-s end">
+                <button type="submit" class="btn btn-primary btn-sm">Save Next Steps</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Interactive Communication History & Timeline -->
+          <div class="crm-timeline-card">
+            <div class="row gap-s between center wrap">
+              <div class="stack-xs">
+                <span class="mono-label">Audit Log & Communication History</span>
+                <h3 class="section-title">Timeline (${d.selected.history.length} events)</h3>
+              </div>
+              <button type="button" class="btn btn-sm" data-action="logInteraction" data-id="${sel.id}">${icon('plus', 14)} Add Note or Call</button>
+            </div>
+
+            <div class="crm-timeline">
+              ${d.selected.history.length ? d.selected.history.map((h) => {
+                const badgeClass = h.direction === 'inbound' ? 'badge-inbound' : h.type === 'meeting' ? 'badge-meeting' : h.type === 'call' ? 'badge-note' : 'badge-outbound';
+                return html`
+                <div class="timeline-entry">
+                  <div class="timeline-dot ${h.direction === 'inbound' ? 'inbound' : h.type === 'meeting' ? 'meeting' : 'outbound'}"></div>
+                  <div class="timeline-header">
+                    <div class="row gap-s center">
+                      <span class="${badgeClass}">${h.type.toUpperCase()} · ${h.direction === 'inbound' ? 'INBOUND' : 'OUTBOUND'}</span>
+                      <span class="timeline-subject">${h.subject || 'Interaction'}</span>
+                    </div>
+                    <span class="timeline-time">${fdate(h.date)} · ${ago(h.date)}</span>
+                  </div>
+                  <div class="timeline-body">
+                    <p>${h.snippet || h.body || 'No details provided.'}</p>
+                    ${h.author ? html`<span class="muted small mt-xs block">— ${h.author}</span>` : ''}
+                  </div>
+                </div>`;
+              }) : html`<p class="muted">No interaction history recorded yet.</p>`}
+            </div>
+          </div>
+
+          ${d.selected.partnership ? html`
+          <div class="card stack-s" style="background:var(--ground);">
+            <div class="row gap-s between center">
+              <div class="stack-xs">
+                <span class="mono-label">Active Partner Relationship</span>
+                <strong>Step ${d.selected.partnership.step} of 5: ${d.selected.partnership.next_action || 'In progress'}</strong>
+              </div>
+              <button type="button" class="btn btn-sm" data-action="go" data-route="o-board" data-id="${d.selected.partnership.id}">Open Execution Board →</button>
+            </div>
+          </div>` : ''}
+
+        </article>` : html`
+        <div class="card empty">
+          <p>Select a contact from the list on the left to view full communication details and manage follow-ups.</p>
+        </div>`}
+      </main>
+    </div>`;
+  },
+  actions: {
+    selectContact(el, app) {
+      app.setSel('o-contacts', el.dataset.id);
+      app.refresh();
+    },
+    async syncGmail(el, app) {
+      el.setAttribute('aria-busy', 'true');
+      toast('Syncing contacts & email communications from Gmail…');
+      try {
+        const res = await app.call('syncGmailContacts', {});
+        toast(`Gmail sync complete: ${res.synced || 0} messages parsed, ${res.created || 0} new contacts, ${res.updated || 0} updated.`);
+      } catch (err) {
+        toast(`Gmail sync: ${err.message}`, 'bad');
+      } finally {
+        el.removeAttribute('aria-busy');
+        app.refresh();
+      }
+    },
+    async newContact(el, app) {
+      const d = await dialog({
+        title: 'Add New Contact',
+        submit: 'Save Contact',
+        body: html`
+          ${field('Contact Name', 'name', { required: true, autofocus: true, placeholder: 'e.g. Dr. Jane Smith' })}
+          <div class="form-grid">
+            ${field('Email Address', 'email', { type: 'email', required: true, placeholder: 'jane@organization.org' })}
+            ${field('Phone Number', 'phone', { type: 'tel', placeholder: '(225) 555-0199' })}
+          </div>
+          <div class="form-grid">
+            ${field('Organization / Company', 'company', { required: true, placeholder: 'e.g. West Feliciana High School' })}
+            ${field('Position / Role', 'position', { placeholder: 'e.g. Director of Student Services' })}
+          </div>
+          <div class="form-grid">
+            ${field('Segment', 'segment', { options: SEGMENT_OPTIONS })}
+            ${field('Initial Status', 'status_of_last_request', {
+              options: [
+                ['Awaiting Reply', 'Awaiting Reply'],
+                ['Needs Follow-up', 'Needs Follow-up'],
+                ['Replied', 'Replied'],
+                ['Meeting Booked', 'Meeting Booked'],
+                ['Access Point Active', 'Active Partner'],
+              ],
+            })}
+          </div>
+          <div class="form-grid">
+            ${field('First Communication Date', 'first_communication', { type: 'date', value: new Date().toISOString().split('T')[0] })}
+            ${field('Next Follow-up Date', 'next_follow_up_date', { type: 'date', value: new Date(Date.now() + 3 * DAY_MS).toISOString().split('T')[0] })}
+          </div>
+          ${field('Next Steps / Action Plan', 'follow_up_next_steps', { value: 'Send introductory email regarding naloxone training' })}
+          ${field('Notes & Context', 'notes', { placeholder: 'Notes from scout or background research…' })}
+        `,
+      });
+      if (!d) return;
+      const c = await app.call('upsertContact', {
+        ...d,
+        last_communication: d.first_communication,
+        last_direction: 'outbound',
+        last_snippet: d.follow_up_next_steps,
+      });
+      app.setSel('o-contacts', c.id);
+      toast('Contact created');
+      app.refresh();
+    },
+    async editContact(el, app) {
+      const contact = (await app.call('contactDetails', { id: el.dataset.id })).contact;
+      const d = await dialog({
+        title: 'Edit Contact Details',
+        submit: 'Save Changes',
+        body: html`
+          ${field('Contact Name', 'name', { value: contact.name, required: true, autofocus: true })}
+          <div class="form-grid">
+            ${field('Email Address', 'email', { type: 'email', value: contact.email, required: true })}
+            ${field('Phone Number', 'phone', { type: 'tel', value: contact.phone || '' })}
+          </div>
+          <div class="form-grid">
+            ${field('Organization / Company', 'company', { value: contact.company || '' })}
+            ${field('Position / Role', 'position', { value: contact.position || contact.title || '' })}
+          </div>
+          ${field('Segment', 'segment', { options: SEGMENT_OPTIONS, value: contact.segment })}
+          ${field('General Notes', 'notes', { value: contact.notes || '' })}
+        `,
+      });
+      if (!d) return;
+      await app.call('upsertContact', { id: el.dataset.id, ...d });
+      toast('Contact updated');
+      app.refresh();
+    },
+    async deleteContact(el, app) {
+      const ok = await dialog({
+        title: 'Delete Contact?',
+        submit: 'Delete',
+        body: html`<p>Are you sure you want to delete this contact? Their communication history will be removed.</p>`,
+      });
+      if (!ok) return;
+      await app.call('deleteContact', { id: el.dataset.id });
+      app.setSel('o-contacts', null);
+      toast('Contact deleted');
+      app.refresh();
+    },
+    async logInteraction(el, app) {
+      const d = await dialog({
+        title: 'Log Communication / Interaction',
+        submit: 'Add to Timeline',
+        body: html`
+          <div class="form-grid">
+            ${field('Interaction Type', 'type', {
+              options: [
+                ['email', 'Email (Sent or Received)'],
+                ['call', 'Phone Call'],
+                ['meeting', 'In-Person Meeting'],
+                ['note', 'Internal Team Note'],
+              ],
+            })}
+            ${field('Direction', 'direction', {
+              options: [
+                ['inbound', 'Inbound (From partner)'],
+                ['outbound', 'Outbound (Sent by us)'],
+              ],
+            })}
+          </div>
+          ${field('Subject / Topic', 'subject', { required: true, placeholder: 'e.g. Call regarding Act 378 compliance dates' })}
+          ${field('Notes & Summary', 'snippet', { required: true, placeholder: 'What was discussed, agreed upon, or requested?' })}
+          <div class="form-grid">
+            ${field('Date of Interaction', 'date', { type: 'date', value: new Date().toISOString().split('T')[0] })}
+            ${field('Updated Request Status', 'status', {
+              options: [
+                ['Replied', 'Replied / Active response'],
+                ['Meeting Booked', 'Meeting Booked'],
+                ['Awaiting Reply', 'Awaiting Reply'],
+                ['Needs Follow-up', 'Needs Follow-up'],
+                ['Proposal Sent', 'Proposal Sent'],
+                ['Access Point Active', 'Access Point Active'],
+              ],
+            })}
+          </div>
+        `,
+      });
+      if (!d) return;
+      await app.call('logContactCommunication', {
+        contactId: el.dataset.id,
+        ...d,
+        date: d.date ? new Date(`${d.date}T12:00:00-05:00`).toISOString() : new Date().toISOString(),
+      });
+      toast('Interaction logged to timeline');
+      app.refresh();
+    },
+    async snooze(el, app) {
+      const days = +el.dataset.days || 7;
+      const targetDate = new Date(Date.now() + days * 1000 * 60 * 60 * 24).toISOString().split('T')[0];
+      await app.call('setContactFollowUp', {
+        contactId: el.dataset.id,
+        next_follow_up_date: targetDate,
+      });
+      toast(`Follow-up snoozed by ${days} days (${targetDate})`);
+      app.refresh();
+    },
+    async exportCsv(el, app) {
+      const data = await app.call('contactsList', { search: '', segment: 'all', status: 'all', sort: 'name' });
+      const rows = [
+        ['Name', 'Email', 'Phone', 'Company', 'Position', 'Segment', 'Status', 'First Communication', 'Last Communication', 'Next Follow-up', 'Next Steps'],
+      ];
+      for (const c of data.contacts) {
+        rows.push([
+          c.name || '',
+          c.email || '',
+          c.phone || '',
+          c.company || '',
+          c.position || c.title || '',
+          c.segment_label || c.segment || '',
+          c.status_of_last_request || '',
+          c.first_communication || '',
+          c.last_communication || '',
+          c.next_follow_up_date || '',
+          c.follow_up_next_steps || '',
+        ]);
+      }
+      const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `hope_studio_contacts_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast('Contacts CSV exported');
+    },
+    copy(el) {
+      copyText(el.dataset.text);
+      toast('Copied to clipboard');
+    },
+  },
+  submits: {
+    async updateFollowup(data, app, form) {
+      await app.call('setContactFollowUp', {
+        contactId: form.dataset.id,
+        next_follow_up_date: data.next_follow_up_date,
+        status_of_last_request: data.status_of_last_request,
+        follow_up_next_steps: data.follow_up_next_steps,
+      });
+      toast('Follow-up schedule and request status saved');
+      app.refresh();
+    },
+  },
+  changes: {
+    setSort(el, app) {
+      app.setPref('contact_sort', el.value);
+      app.refresh();
+    },
+  },
+  inputs: {
+    onSearch(el, app) {
+      app.setPref('contact_search', el.value);
+      // Debounced search
+      clearTimeout(window._contactSearchTimer);
+      window._contactSearchTimer = setTimeout(() => app.refresh(), 300);
+    },
+  },
+};
+
 export default {
   'o-week': week,
+  'o-contacts': contacts,
   'o-scout': scout,
   'o-writer': writer,
   'o-board': board,

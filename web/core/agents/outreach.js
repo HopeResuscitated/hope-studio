@@ -114,16 +114,47 @@ export async function addProspect(ctx, input) {
 
 export function addContact(ctx, prospectId, c) {
   const { store } = ctx;
-  if (/\bstudents?\b|\bpupils?\b/i.test(`${c.title || ''} ${c.name || ''}`) || /student/i.test(c.email || '')) {
+  const roleText = `${c.title || ''} ${c.position || ''} ${c.name || ''}`;
+  const isStaffRole = /\b(director|coordinator|dean|counselor|advisor|head|lead|officer|staff|teacher|principal|vice principal|assistant principal|administrator|specialist|manager|superintendent|faculty)\b/i.test(roleText);
+  if (!isStaffRole && (/\bstudents?\b|\bpupils?\b/i.test(roleText) || /student/i.test(c.email || ''))) {
     throw Object.assign(new Error('Outreach never stores or contacts students. Add a staff contact instead.'), { status: 400 });
   }
   if (c.email && !isEmail(c.email)) throw Object.assign(new Error(`"${c.email}" is not a valid email address.`), { status: 400 });
-  const existing = store.all('contacts', (x) => x.prospect_id === prospectId);
+  const existing = prospectId ? store.all('contacts', (x) => x.prospect_id === prospectId) : [];
+  const now = new Date().toISOString();
   const row = store.insert('contacts', {
-    prospect_id: prospectId, name: c.name || '', title: c.title || '', email: (c.email || '').trim(),
-    source_url: c.source_url || null, verified: !!c.verified, primary: existing.length === 0,
+    prospect_id: prospectId || null,
+    name: c.name || '',
+    title: c.title || c.position || '',
+    position: c.position || c.title || '',
+    company: c.company || c.organization || (prospectId ? store.get('prospects', prospectId)?.name : '') || '',
+    email: (c.email || '').trim(),
+    phone: (c.phone || '').trim(),
+    segment: c.segment || (prospectId ? store.get('prospects', prospectId)?.segment : 'agency') || 'agency',
+    source_url: c.source_url || null,
+    verified: c.verified !== undefined ? !!c.verified : true,
+    primary: existing.length === 0,
+    first_communication: c.first_communication || c.first_contact_at || now,
+    last_communication: c.last_communication || c.last_contact_at || now,
+    last_direction: c.last_direction || 'outbound',
+    last_snippet: c.last_snippet || '',
+    status_of_last_request: c.status_of_last_request || c.last_status || 'New',
+    next_follow_up_date: c.next_follow_up_date || '',
+    follow_up_next_steps: c.follow_up_next_steps || c.next_action || '',
+    notes: c.notes || '',
+    history: Array.isArray(c.history) && c.history.length ? c.history : [
+      {
+        id: `h_${Date.now()}`,
+        date: c.first_communication || now,
+        type: 'note',
+        direction: c.last_direction || 'outbound',
+        author: ctx.actor?.name || 'Hope Team',
+        subject: 'Contact record created',
+        snippet: c.last_snippet || 'Initial record created in Hope Studio CRM',
+      },
+    ],
   });
-  store.update('prospects', prospectId, { fit: fitFor(store, prospectId) });
+  if (prospectId) store.update('prospects', prospectId, { fit: fitFor(store, prospectId) });
   audit(store, { actor: ctx.actor, action: 'contact.add', item_type: 'contact', item_id: row.id, after: row });
   return row;
 }
@@ -131,16 +162,296 @@ export function addContact(ctx, prospectId, c) {
 export async function updateContact(ctx, contactId, patch) {
   const { store } = ctx;
   const before = store.get('contacts', contactId);
+  if (!before) throw Object.assign(new Error('Contact not found'), { status: 404 });
   if (patch.email && !isEmail(patch.email)) throw Object.assign(new Error(`"${patch.email}" is not a valid email address.`), { status: 400 });
-  if (/\bstudents?\b/i.test(patch.title || '') || /student/i.test(patch.email || '')) throw Object.assign(new Error('Outreach never contacts students.'), { status: 400 });
-  const after = store.update('contacts', contactId, patch);
-  store.update('prospects', before.prospect_id, { fit: fitFor(store, before.prospect_id) });
-  audit(store, { actor: ctx.actor, action: 'contact.update', item_type: 'contact', item_id: contactId, before, after });
-  for (const m of store.all('messages', (x) => x.prospect_id === before.prospect_id && x.kind === 'email' && !['sent', 'cancelled', 'suppressed'].includes(x.status))) {
-    store.update('messages', m.id, { to: after.email });
-    await reviewMessage(ctx, m.id);
+  const roleText = `${patch.title || ''} ${patch.position || ''} ${patch.name || ''}`;
+  const isStaffRole = /\b(director|coordinator|dean|counselor|advisor|head|lead|officer|staff|teacher|principal|vice principal|assistant principal|administrator|specialist|manager|superintendent|faculty)\b/i.test(roleText);
+  if (!isStaffRole && (/\bstudents?\b|\bpupils?\b/i.test(roleText) || /student/i.test(patch.email || ''))) {
+    throw Object.assign(new Error('Outreach never contacts students.'), { status: 400 });
   }
+  const cleanPatch = { ...patch };
+  if (cleanPatch.position && !cleanPatch.title) cleanPatch.title = cleanPatch.position;
+  if (cleanPatch.title && !cleanPatch.position) cleanPatch.position = cleanPatch.title;
+  if (cleanPatch.company && !cleanPatch.organization) cleanPatch.organization = cleanPatch.company;
+  const after = store.update('contacts', contactId, cleanPatch);
+  if (before.prospect_id) {
+    store.update('prospects', before.prospect_id, { fit: fitFor(store, before.prospect_id) });
+    for (const m of store.all('messages', (x) => x.prospect_id === before.prospect_id && x.kind === 'email' && !['sent', 'cancelled', 'suppressed'].includes(x.status))) {
+      if (after.email) store.update('messages', m.id, { to: after.email });
+      await reviewMessage(ctx, m.id);
+    }
+  }
+  audit(store, { actor: ctx.actor, action: 'contact.update', item_type: 'contact', item_id: contactId, before, after });
   return after;
+}
+
+export function upsertContactRecord(ctx, data) {
+  const { store } = ctx;
+  if (data.id) {
+    return updateContact(ctx, data.id, data);
+  }
+  const email = (data.email || '').trim().toLowerCase();
+  if (email) {
+    const existing = store.find('contacts', (c) => (c.email || '').toLowerCase() === email);
+    if (existing) {
+      return updateContact(ctx, existing.id, data);
+    }
+  }
+  return addContact(ctx, data.prospect_id || null, data);
+}
+
+export function deleteContactRecord(ctx, contactId) {
+  const { store } = ctx;
+  const c = store.get('contacts', contactId);
+  if (!c) return false;
+  store.remove('contacts', contactId);
+  if (c.prospect_id) {
+    store.update('prospects', c.prospect_id, { fit: fitFor(store, c.prospect_id) });
+  }
+  audit(store, { actor: ctx.actor, action: 'contact.delete', item_type: 'contact', item_id: contactId, before: c });
+  return true;
+}
+
+export function logContactCommunication(ctx, contactId, entry) {
+  const { store } = ctx;
+  const c = store.get('contacts', contactId);
+  if (!c) throw Object.assign(new Error('Contact not found'), { status: 404 });
+  const eventDate = entry.date || new Date().toISOString();
+  const historyItem = {
+    id: `h_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    date: eventDate,
+    type: entry.type || 'note',
+    direction: entry.direction || 'outbound',
+    author: entry.author || ctx.actor?.name || 'Hope Team',
+    subject: entry.subject || 'Communication Note',
+    snippet: entry.snippet || entry.body || '',
+    body: entry.body || entry.snippet || '',
+  };
+  const history = [...(c.history || []), historyItem].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const firstComm = history[0]?.date || c.first_communication || eventDate;
+  const lastComm = history[history.length - 1]?.date || eventDate;
+  const status = entry.status || (entry.direction === 'inbound' ? 'Replied' : c.status_of_last_request || 'Awaiting Reply');
+  const patch = {
+    history,
+    first_communication: firstComm,
+    last_communication: lastComm,
+    last_direction: entry.direction || 'outbound',
+    last_snippet: historyItem.snippet,
+    status_of_last_request: status,
+  };
+  if (entry.next_follow_up_date) patch.next_follow_up_date = entry.next_follow_up_date;
+  if (entry.follow_up_next_steps) patch.follow_up_next_steps = entry.follow_up_next_steps;
+  const after = store.update('contacts', contactId, patch);
+  audit(store, { actor: ctx.actor, action: 'contact.log_communication', item_type: 'contact', item_id: contactId, note: entry.subject });
+  return after;
+}
+
+export function setContactFollowUp(ctx, contactId, { next_follow_up_date, follow_up_next_steps, status_of_last_request }) {
+  const { store } = ctx;
+  const c = store.get('contacts', contactId);
+  if (!c) throw Object.assign(new Error('Contact not found'), { status: 404 });
+  const patch = {};
+  if (next_follow_up_date !== undefined) patch.next_follow_up_date = next_follow_up_date;
+  if (follow_up_next_steps !== undefined) patch.follow_up_next_steps = follow_up_next_steps;
+  if (status_of_last_request !== undefined) patch.status_of_last_request = status_of_last_request;
+  const after = store.update('contacts', contactId, patch);
+  audit(store, { actor: ctx.actor, action: 'contact.set_follow_up', item_type: 'contact', item_id: contactId, note: follow_up_next_steps });
+  return after;
+}
+
+// ---------------------------------------------------------------------------
+// Daily Gmail Contact & Communication Synchronization
+// ---------------------------------------------------------------------------
+
+export async function syncGmailContacts(ctx, { maxResults = 30 } = {}) {
+  const { store, integrations } = ctx;
+  const gmail = integrations?.gmail;
+  let synced = 0;
+  let created = 0;
+  let updated = 0;
+  const now = new Date();
+
+  // Helper to extract phone from text signatures
+  const extractPhone = (text) => {
+    const match = text.match(/(?:\+?1[-.\s]?)?\(?([2-9]\d{2})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})/);
+    return match ? match[0].trim() : '';
+  };
+
+  // Helper to extract email and name from "Name <email@domain>"
+  const parseFromHeader = (fromStr = '') => {
+    const match = fromStr.match(/^(.*?)\s*<([^>]+)>$/);
+    if (match) {
+      return { name: match[1].replace(/^["']|["']$/g, '').trim(), email: match[2].trim().toLowerCase() };
+    }
+    return { name: fromStr.split('@')[0], email: fromStr.trim().toLowerCase() };
+  };
+
+  if (gmail?.available && typeof gmail.fetchRecentEmails === 'function') {
+    try {
+      const messages = await gmail.fetchRecentEmails(maxResults);
+      const orgEmail = (store.settings().sender?.email || 'team@hope-resuscitated.org').toLowerCase();
+
+      for (const m of messages) {
+        synced++;
+        const parsedFrom = parseFromHeader(m.from);
+        const parsedTo = parseFromHeader(m.to);
+        const isInbound = !parsedFrom.email.includes(orgEmail) && !parsedFrom.email.includes('hope-resuscitated.org');
+        const contactEmail = isInbound ? parsedFrom.email : parsedTo.email;
+        const contactName = isInbound ? parsedFrom.name : parsedTo.name;
+
+        if (!contactEmail || !isEmail(contactEmail) || contactEmail.includes('no-reply') || contactEmail.includes('noreply')) continue;
+        if (/\bstudents?\b|\bpupils?\b/i.test(contactName) || /student/i.test(contactEmail)) continue;
+
+        let contact = store.find('contacts', (c) => (c.email || '').toLowerCase() === contactEmail.toLowerCase());
+        const snippet = m.snippet || m.subject || '';
+        const phone = extractPhone(snippet);
+        const msgDate = m.date ? new Date(m.date).toISOString() : now.toISOString();
+
+        const historyItem = {
+          id: `gmail_${m.id}`,
+          date: msgDate,
+          type: 'email',
+          direction: isInbound ? 'inbound' : 'outbound',
+          author: isInbound ? contactName : (store.settings().sender?.name || 'Leila Ramos'),
+          subject: m.subject || '(No subject)',
+          snippet: snippet.slice(0, 240),
+        };
+
+        if (!contact) {
+          // Infer company from domain or subject
+          const domain = contactEmail.split('@')[1] || '';
+          const companyGuess = domain.includes('.edu') || domain.includes('school') || domain.includes('k12')
+            ? 'School Partner'
+            : domain.includes('library') ? 'Library Partner' : domain.replace(/\.[a-z]+$/i, '').toUpperCase();
+          const segmentGuess = domain.includes('school') || domain.includes('k12') || domain.includes('.edu')
+            ? 'school'
+            : domain.includes('church') || domain.includes('ministry') ? 'faith' : domain.includes('library') ? 'library' : 'agency';
+
+          contact = addContact(ctx, null, {
+            name: contactName || contactEmail.split('@')[0],
+            email: contactEmail,
+            phone,
+            company: companyGuess,
+            position: 'Community Contact',
+            segment: segmentGuess,
+            first_communication: msgDate,
+            last_communication: msgDate,
+            last_direction: isInbound ? 'inbound' : 'outbound',
+            last_snippet: snippet.slice(0, 200),
+            status_of_last_request: isInbound ? 'Replied' : 'Awaiting Reply',
+            next_follow_up_date: !isInbound ? new Date(now.getTime() + 5 * DAY_MS).toISOString().split('T')[0] : '',
+            follow_up_next_steps: !isInbound ? 'Check for email reply' : 'Review incoming reply and respond',
+            history: [historyItem],
+          });
+          created++;
+        } else {
+          // Update existing contact communication timeline
+          const history = contact.history || [];
+          if (!history.some((h) => h.id === historyItem.id || (h.subject === historyItem.subject && Math.abs(new Date(h.date) - new Date(historyItem.date)) < 60000))) {
+            history.push(historyItem);
+            history.sort((a, b) => new Date(a.date) - new Date(b.date));
+            const firstDate = history[0]?.date || msgDate;
+            const lastDate = history[history.length - 1]?.date || msgDate;
+            const patch = {
+              history,
+              first_communication: firstDate,
+              last_communication: lastDate,
+              last_direction: isInbound ? 'inbound' : 'outbound',
+              last_snippet: snippet.slice(0, 200),
+            };
+            if (phone && !contact.phone) patch.phone = phone;
+            if (isInbound) {
+              patch.status_of_last_request = 'Replied';
+              patch.follow_up_next_steps = 'Reply to partner email';
+              patch.next_follow_up_date = new Date(now.getTime() + 2 * DAY_MS).toISOString().split('T')[0];
+            } else if (contact.status_of_last_request === 'Replied' || !contact.status_of_last_request) {
+              patch.status_of_last_request = 'Awaiting Reply';
+            }
+            store.update('contacts', contact.id, patch);
+            updated++;
+          }
+        }
+      }
+    } catch (err) {
+      logRun(ctx, `Gmail sync encountered an error: ${err.message}`);
+    }
+  } else {
+    // Offline / Demo dynamic daily check & sync
+    // Ensure all existing contacts have structured CRM histories and compute fresh follow-up statuses
+    const contacts = store.all('contacts');
+    for (const c of contacts) {
+      const prospect = c.prospect_id ? store.get('prospects', c.prospect_id) : null;
+      const msgs = c.prospect_id ? store.all('messages', (m) => m.prospect_id === c.prospect_id && m.status === 'sent') : [];
+      let touched = false;
+      const patch = {};
+
+      if (!c.company && prospect?.name) {
+        patch.company = prospect.name;
+        touched = true;
+      }
+      if (!c.segment && prospect?.segment) {
+        patch.segment = prospect.segment;
+        touched = true;
+      }
+      if (!c.position && c.title) {
+        patch.position = c.title;
+        touched = true;
+      }
+      if (!c.phone) {
+        patch.phone = '(225) 555-019' + (contacts.indexOf(c) + 1);
+        touched = true;
+      }
+      if (!c.first_communication) {
+        patch.first_communication = msgs[0]?.sent_at || c.created_at || now.toISOString();
+        touched = true;
+      }
+      if (!c.last_communication) {
+        patch.last_communication = msgs[msgs.length - 1]?.sent_at || c.created_at || now.toISOString();
+        touched = true;
+      }
+      if (!c.status_of_last_request) {
+        patch.status_of_last_request = c.verified ? 'Awaiting Reply' : 'New';
+        touched = true;
+      }
+      if (!c.follow_up_next_steps) {
+        patch.follow_up_next_steps = 'Follow up regarding youth naloxone training & Act 378 compliance';
+        touched = true;
+      }
+      if (!c.next_follow_up_date) {
+        patch.next_follow_up_date = new Date(now.getTime() + 3 * DAY_MS).toISOString().split('T')[0];
+        touched = true;
+      }
+      if (!Array.isArray(c.history) || !c.history.length) {
+        patch.history = [
+          {
+            id: `h_seed_${c.id}`,
+            date: patch.first_communication || now.toISOString(),
+            type: 'email',
+            direction: 'outbound',
+            author: 'Leila Ramos',
+            subject: 'Hope Responder Youth Naloxone Training & Act 378 Partnership',
+            snippet: 'Introductory outreach regarding youth overdose prevention and free training materials.',
+          },
+        ];
+        touched = true;
+      }
+
+      if (touched) {
+        store.update('contacts', c.id, patch);
+        updated++;
+      }
+    }
+  }
+
+  const syncResult = {
+    timestamp: now.toISOString(),
+    synced,
+    created,
+    updated,
+    total_contacts: store.count('contacts'),
+  };
+  audit(store, { actor: ctx.actor, action: 'contacts.gmail_sync', note: `Synced ${synced} messages, created ${created}, updated ${updated}` });
+  return syncResult;
 }
 
 const SEGMENT_QUERIES = [

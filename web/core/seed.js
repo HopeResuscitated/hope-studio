@@ -291,31 +291,185 @@ export async function seedSamples(store, integrations = { mode: 'demo' }) {
   await filterGrant(ctx, g5.id);
   store.update('grants', g5.id, { match_reason: 'Why it fits: prioritizes youth-led organizations in the Baton Rouge region. Scout could not confirm whether an annual budget minimum applies.' });
 
-  // --- Outreach prospects (placeholders stay placeholders)
+  // --- Outreach prospects and CRM contacts
   const p1 = await addProspect(ctx, {
-    name: '[High school name]', segment: 'school', parish: null, sample: true, source: 'sample',
+    name: 'West Feliciana High School', segment: 'school', parish: 'West Feliciana', town: 'St. Francisville', sample: true, source: 'sample',
     reason: 'Under Act 378 the school must have a naloxone policy, and its website lists no student training. Good candidate for a founding Corps chapter.',
     offerings: ['assembly', 'act378', 'corps'],
-    contact: { name: '[Counselor name]', title: 'Counselor', email: 'counselor@example.org', verified: true, source_url: 'https://example.org/staff' },
+    contact: {
+      name: 'Dr. Marcus Vance', title: 'Director of Student Services', position: 'Director of Student Services',
+      company: 'West Feliciana High School', email: 'mvance@wfpsb.org', phone: '(225) 635-3891', verified: true,
+      source_url: 'https://www.wfpsb.org/staff',
+      first_communication: inDays(-18),
+      last_communication: inDays(-2),
+      last_direction: 'inbound',
+      last_snippet: 'Thanks for reaching out Leila. Our admin team would love to schedule a 35-min assembly in October. Let us know what dates work.',
+      status_of_last_request: 'Replied',
+      next_follow_up_date: inDays(2).split('T')[0],
+      follow_up_next_steps: 'Send available October assembly dates and sample student materials',
+      history: [
+        {
+          id: 'h_wfs_1',
+          date: inDays(-18),
+          type: 'email',
+          direction: 'outbound',
+          author: 'Leila Ramos',
+          subject: 'Hope Responder Youth Naloxone Training & Act 378 Partnership',
+          snippet: 'Reaching out to offer free 35-minute peer-led naloxone assemblies and Act 378 policy support.',
+        },
+        {
+          id: 'h_wfs_2',
+          date: inDays(-2),
+          type: 'email',
+          direction: 'inbound',
+          author: 'Dr. Marcus Vance',
+          subject: 'Re: Hope Responder Youth Naloxone Training & Act 378 Partnership',
+          snippet: 'Thanks for reaching out Leila. Our admin team would love to schedule a 35-min assembly in October. Let us know what dates work.',
+        },
+      ],
+    },
   });
+
   const p2 = await addProspect(ctx, {
-    name: '[Church name] youth ministry', segment: 'faith', parish: 'East Baton Rouge', town: 'Zachary', sample: true, source: 'sample',
+    name: 'First Baptist Youth Ministry', segment: 'faith', parish: 'East Baton Rouge', town: 'Zachary', sample: true, source: 'sample',
     reason: 'Runs a weekly youth group near your Zachary access point, and could host a Community Purpose Project build day.',
     offerings: ['group_training', 'purpose_project'],
-    contact: { name: '[Youth pastor name]', title: 'Youth pastor', email: 'youthpastor@example.org', verified: true },
+    contact: {
+      name: 'Pastor David Holloway', title: 'Youth & Family Minister', position: 'Youth & Family Minister',
+      company: 'First Baptist Youth Ministry', email: 'dholloway@fbczachary.org', phone: '(225) 654-2231', verified: true,
+      first_communication: inDays(-12),
+      last_communication: inDays(-3),
+      last_direction: 'inbound',
+      last_snippet: 'We would love to host a Purpose Project build day on Saturday morning. Can you supply the stand blueprints?',
+      status_of_last_request: 'Meeting Booked',
+      next_follow_up_date: inDays(3).split('T')[0],
+      follow_up_next_steps: 'Confirm materials checklist and volunteer turnout for Purpose Project build day',
+      history: [
+        {
+          id: 'h_fbc_1',
+          date: inDays(-12),
+          type: 'email',
+          direction: 'outbound',
+          author: 'Leila Ramos',
+          subject: 'Youth group training & Purpose Project build day',
+          snippet: 'Invitation to partner on hands-on training and building community access point stands.',
+        },
+        {
+          id: 'h_fbc_2',
+          date: inDays(-3),
+          type: 'email',
+          direction: 'inbound',
+          author: 'Pastor David Holloway',
+          subject: 'Re: Youth group training & Purpose Project build day',
+          snippet: 'We would love to host a Purpose Project build day on Saturday morning. Can you supply the stand blueprints?',
+        },
+      ],
+    },
   });
+
   const p3 = await addProspect(ctx, {
-    name: '[Business name]', segment: 'business', parish: 'West Baton Rouge', town: 'Port Allen', sample: true, source: 'sample',
-    reason: 'High foot-traffic spot popular with teens. Scout found a general inbox but no owner email, so confirm before sending.',
-    offerings: ['safe_space'],
-    contact: { name: '', title: 'General inbox', email: 'info@example.org', verified: false },
+    name: 'River Road Coffee & Bakery', segment: 'business', parish: 'West Baton Rouge', town: 'Port Allen', sample: true, source: 'sample',
+    reason: 'High foot-traffic spot popular with teens. Safe space decal and indoor naloxone box would provide quick access.',
+    offerings: ['safe_space', 'staff_orientation'],
+    contact: {
+      name: 'Sarah Jenkins', title: 'General Manager', position: 'General Manager',
+      company: 'River Road Coffee & Bakery', email: 'sarah@riverroadcoffee.com', phone: '(225) 343-8890', verified: true,
+      first_communication: inDays(-10),
+      last_communication: inDays(-8),
+      last_direction: 'outbound',
+      last_snippet: 'Sent 10-minute staff orientation overview and Hope Safe Space window decal preview.',
+      status_of_last_request: 'Needs Follow-up',
+      next_follow_up_date: inDays(1).split('T')[0],
+      follow_up_next_steps: 'Follow up on naloxone box placement & schedule 10-min staff briefing',
+      history: [
+        {
+          id: 'h_rrc_1',
+          date: inDays(-10),
+          type: 'email',
+          direction: 'outbound',
+          author: 'Leila Ramos',
+          subject: 'Hope Safe Space Partner Program for River Road Coffee',
+          snippet: 'Introduction to hosting an indoor naloxone box and displaying the window decal.',
+        },
+        {
+          id: 'h_rrc_2',
+          date: inDays(-8),
+          type: 'email',
+          direction: 'outbound',
+          author: 'Leila Ramos',
+          subject: 'Re: Hope Safe Space Partner Program for River Road Coffee',
+          snippet: 'Sent 10-minute staff orientation overview and Hope Safe Space window decal preview.',
+        },
+      ],
+    },
   });
-  await addProspect(ctx, {
-    name: '[Public library branch]', segment: 'library', parish: 'West Baton Rouge', town: 'Brusly', sample: true, source: 'sample',
+
+  const p4 = await addProspect(ctx, {
+    name: 'West Feliciana Parish Library', segment: 'library', parish: 'West Feliciana', town: 'St. Francisville', sample: true, source: 'sample',
     reason: 'Libraries already host our access points; a Community Partner upgrade adds trainings and events.',
     offerings: ['community_partner', 'group_training'],
+    contact: {
+      name: 'Brenda Martinez', title: 'Head Librarian & Community Coordinator', position: 'Head Librarian',
+      company: 'West Feliciana Parish Library', email: 'bmartinez@wfplibrary.org', phone: '(225) 635-3364', verified: true,
+      first_communication: inDays(-45),
+      last_communication: inDays(-5),
+      last_direction: 'inbound',
+      last_snippet: 'Access point took 42 doses this month. Placard QR scans are up 30%.',
+      status_of_last_request: 'Access Point Active',
+      next_follow_up_date: inDays(10).split('T')[0],
+      follow_up_next_steps: 'Restock Naloxone access station & verify QR placards',
+      history: [
+        {
+          id: 'h_wfl_1',
+          date: inDays(-45),
+          type: 'meeting',
+          direction: 'inbound',
+          author: 'Brenda Martinez',
+          subject: '24/7 Naloxone station installation',
+          snippet: 'Agreement on outdoor 24/7 access box on library exterior wall.',
+        },
+        {
+          id: 'h_wfl_2',
+          date: inDays(-5),
+          type: 'email',
+          direction: 'inbound',
+          author: 'Brenda Martinez',
+          subject: 'Monthly usage update',
+          snippet: 'Access point took 42 doses this month. Placard QR scans are up 30%.',
+        },
+      ],
+    },
   });
-  for (const p of [p1, p2, p3]) if (p.prospect) await draftOutreach(ctx, p.prospect.id);
+
+  const p5 = await addProspect(ctx, {
+    name: 'Port Allen High School', segment: 'school', parish: 'West Baton Rouge', town: 'Port Allen', sample: true, source: 'sample',
+    reason: 'Act 378 compliance outreach for West Baton Rouge schools.',
+    offerings: ['assembly', 'act378'],
+    contact: {
+      name: 'Thomas Landry', title: 'Assistant Principal', position: 'Assistant Principal',
+      company: 'Port Allen High School', email: 'tlandry@wbrschools.net', phone: '(225) 383-1425', verified: true,
+      first_communication: inDays(-6),
+      last_communication: inDays(-6),
+      last_direction: 'outbound',
+      last_snippet: 'Sent introductory email on Act 378 school policy and free staff training guides.',
+      status_of_last_request: 'Awaiting Reply',
+      next_follow_up_date: inDays(1).split('T')[0],
+      follow_up_next_steps: 'Send day-7 follow-up nudge regarding student naloxone awareness',
+      history: [
+        {
+          id: 'h_pah_1',
+          date: inDays(-6),
+          type: 'email',
+          direction: 'outbound',
+          author: 'Leila Ramos',
+          subject: 'Hope Responder Youth Naloxone Training & Act 378 Partnership',
+          snippet: 'Sent introductory email on Act 378 school policy and free staff training guides.',
+        },
+      ],
+    },
+  });
+
+  for (const p of [p1, p2, p3, p4, p5]) if (p.prospect) await draftOutreach(ctx, p.prospect.id);
 
   // --- Execution board
   addPartner(ctx, { name: '[Charter school name]', segment: 'school', step: 1, offerings: ['assembly', 'corps'], next_action: 'Intro call · prep notes ready', next_date: inDays(4), sample: true });

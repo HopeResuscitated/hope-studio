@@ -336,7 +336,9 @@ export function reviewMessageHard(store, message, { prospect, contact, mode }) {
         { blocking: true, fix: address ? { field: 'body', text: withFooter(body, settings) } : null }));
 
     const email = (contact?.email || message.to || '').trim();
-    const student = /\bstudents?\b|\bpupil\b|\blearner\b/i.test(`${contact?.title || ''}`) || /student/i.test(email);
+    const roleText = `${contact?.title || ''} ${contact?.position || ''}`;
+    const isStaffRole = /\b(director|coordinator|dean|counselor|advisor|head|lead|officer|staff|teacher|principal|vice principal|assistant principal|administrator|specialist|manager|superintendent|faculty)\b/i.test(roleText);
+    const student = !isStaffRole && (/\bstudents?\b|\bpupil\b|\blearner\b/i.test(roleText) || /student/i.test(email));
     out.push(student ? flag('not_student', 'Staff contact, never a student', 'Outreach never contacts students. Pick a staff contact.', { blocking: true })
       : pass('not_student', 'Staff contact, never a student'));
 

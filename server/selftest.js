@@ -191,3 +191,63 @@ test('social content ideas generator returns pillar suggestions', async () => {
   assert.equal(ideas.pillar, 'Educate');
   assert.ok(ideas.ideas.length >= 3);
 });
+
+test('crm contact directory and daily gmail synchronization', async () => {
+  const { store, svc, leila } = await fresh();
+
+  // 1. Check contact directory listing and organization
+  const listRes = await svc.call('contactsList', { search: '', segment: 'all', status: 'all', sort: 'followup' }, leila);
+  assert.ok(listRes.contacts.length >= 4);
+  const marcus = listRes.contacts.find((c) => c.email === 'mvance@wfpsb.org');
+  assert.ok(marcus);
+  assert.equal(marcus.name, 'Dr. Marcus Vance');
+  assert.equal(marcus.company, 'West Feliciana High School');
+  assert.equal(marcus.position, 'Director of Student Services');
+  assert.equal(marcus.phone, '(225) 635-3891');
+  assert.ok(marcus.first_communication);
+  assert.ok(marcus.last_communication);
+  assert.equal(marcus.status_of_last_request, 'Replied');
+
+  // 2. Add new contact manually
+  const newC = await svc.call('upsertContact', {
+    name: 'Chief Robert Miller',
+    email: 'rmiller@stfrancisvillepd.org',
+    phone: '(225) 635-4033',
+    company: 'St. Francisville Police Dept',
+    position: 'Chief of Police',
+    segment: 'agency',
+    first_communication: new Date().toISOString(),
+    status_of_last_request: 'Awaiting Reply',
+    next_follow_up_date: '2026-10-01',
+    follow_up_next_steps: 'Deliver replacement naloxone supply for squad cars',
+  }, leila);
+  assert.ok(newC.id);
+  assert.equal(newC.name, 'Chief Robert Miller');
+
+  // 3. Log an interaction note / call to update timeline & communication status
+  const updatedC = await svc.call('logContactCommunication', {
+    contactId: newC.id,
+    type: 'call',
+    direction: 'inbound',
+    subject: 'Squad car naloxone restock request',
+    snippet: 'Chief Miller called to confirm squad car naloxone restocking and requested 10 training pouches.',
+    status: 'Meeting Booked',
+    next_follow_up_date: '2026-10-02',
+    follow_up_next_steps: 'Drop off 10 training kits and naloxone packs',
+  }, leila);
+  assert.equal(updatedC.status_of_last_request, 'Meeting Booked');
+  assert.equal(updatedC.last_direction, 'inbound');
+  assert.ok(updatedC.history.length >= 2);
+
+  // 4. Update follow-up schedule
+  const afterFu = await svc.call('setContactFollowUp', {
+    contactId: newC.id,
+    next_follow_up_date: '2026-10-05',
+    follow_up_next_steps: 'Check in on training pouch distribution',
+  }, leila);
+  assert.equal(afterFu.next_follow_up_date, '2026-10-05');
+
+  // 5. Run daily Gmail synchronization
+  const syncRes = await svc.call('syncGmailContacts', {}, leila);
+  assert.ok(syncRes.total_contacts >= 5);
+});

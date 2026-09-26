@@ -92,6 +92,32 @@ function gmail(token, settings) {
       if (!reply) return null;
       return { id: reply.id, snippet: reply.snippet || '', optOut: /\b(stop|unsubscribe|remove me)\b/i.test(reply.snippet || '') };
     },
+    // Daily sync: fetches recent emails and threads
+    async fetchRecentEmails(maxResults = 40) {
+      const t = await token();
+      const list = await http(`${base}/messages?maxResults=${maxResults}`, { headers: { Authorization: `Bearer ${t}` } });
+      if (!list.messages?.length) return [];
+      const results = [];
+      for (const m of list.messages.slice(0, maxResults)) {
+        try {
+          const msg = await http(`${base}/messages/${m.id}?format=full`, { headers: { Authorization: `Bearer ${t}` } });
+          const headers = msg.payload?.headers || [];
+          const getH = (name) => headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+          results.push({
+            id: msg.id,
+            threadId: msg.threadId,
+            from: getH('From'),
+            to: getH('To'),
+            subject: getH('Subject'),
+            date: getH('Date') || (msg.internalDate ? new Date(+msg.internalDate).toISOString() : new Date().toISOString()),
+            snippet: msg.snippet || '',
+          });
+        } catch {
+          // ignore individual message fetch errors
+        }
+      }
+      return results;
+    },
   };
 }
 
