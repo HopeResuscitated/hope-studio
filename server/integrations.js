@@ -12,11 +12,12 @@ import crypto from 'node:crypto';
 import { env } from './env.js';
 import { centralToDate } from '../web/core/util.js';
 
-async function http(url, { method = 'GET', headers = {}, body, timeout = 30000 } = {}) {
+export async function http(url, { method = 'GET', headers = {}, body, timeout = 30000 } = {}) {
+  const json = body && typeof body === 'object' && !(body instanceof FormData);
   const res = await fetch(url, {
     method,
-    headers: { ...(body && typeof body === 'object' ? { 'Content-Type': 'application/json' } : {}), ...headers },
-    body: body && typeof body === 'object' ? JSON.stringify(body) : body,
+    headers: { ...(json ? { 'Content-Type': 'application/json' } : {}), ...headers },
+    body: json ? JSON.stringify(body) : body,
     signal: AbortSignal.timeout(timeout),
   });
   const text = await res.text();
@@ -32,10 +33,10 @@ async function http(url, { method = 'GET', headers = {}, body, timeout = 30000 }
 // ---------------------------------------------------------------------------
 // Google OAuth (Gmail + Docs share one refresh token for Team@hope-resuscitated.org)
 
-function googleAuth() {
-  const id = env('GOOGLE_CLIENT_ID');
-  const secret = env('GOOGLE_CLIENT_SECRET');
-  const refresh = env('GOOGLE_REFRESH_TOKEN');
+function googleAuth(cfg) {
+  const id = cfg('GOOGLE_CLIENT_ID');
+  const secret = cfg('GOOGLE_CLIENT_SECRET');
+  const refresh = cfg('GOOGLE_REFRESH_TOKEN');
   if (!id || !secret || !refresh) return null;
   let cached = { token: null, expires: 0 };
   return async () => {
@@ -67,9 +68,10 @@ function mime({ from, fromName, to, subject, body }) {
   ].join('\r\n');
 }
 
-function gmail(token, settings) {
+function gmail(token, settings, cfg) {
   const base = 'https://gmail.googleapis.com/gmail/v1/users/me';
-  const sender = () => ({ from: settings().sender?.email || env('GMAIL_FROM', 'Team@hope-resuscitated.org'), fromName: settings().sender?.name || 'Hope Resuscitated' });
+  // Gmail sends as the connected account; the sender name comes from Settings.
+  const sender = () => ({ from: cfg('GOOGLE_EMAIL') || settings().sender?.email || env('GMAIL_FROM', 'Team@hope-resuscitated.org'), fromName: settings().sender?.name || 'Hope Resuscitated' });
   return {
     available: true,
     async send({ to, subject, body, threadId }) {
@@ -170,50 +172,72 @@ function docsFallback(dataDir) {
 // ---------------------------------------------------------------------------
 // Meta Graph API: Facebook Page + Instagram Business account
 
-function meta(dataDir) {
-  const pageId = env('META_PAGE_ID');
-  const token = env('META_PAGE_TOKEN');
-  const igId = env('META_IG_USER_ID');
-  const publicBase = env('PUBLIC_BASE_URL').replace(/\/$/, '');
-  const v = env('META_GRAPH_VERSION', 'v21.0');
+function meta(dataDir, cfg) {
+  const pageId = cfg('META_PAGE_ID');
+  const token = cfg('META_PAGE_TOKEN');
+  const igId = cfg('META_IG_USER_ID');
+  const publicBase = String(cfg('PUBLIC_BASE_URL') || '').replace(/\/$/, '');
+  const v = cfg('META_GRAPH_VERSION') || 'v21.0';
   if (!pageId || !token) return { available: false };
   const g = (p) => `https://graph.facebook.com/${v}/${p}`;
-  const mediaUrl = (m) => {
+  const localFile = (m) => (m?.file_url && !/^https?:/.test(m.file_url) ? path.join(dataDir, m.file_url.replace(/^\//, '')) : null);
+  const publicUrl = (m) => {
     if (!m?.file_url) throw new Error('This post has no uploaded media file.');
     if (/^https?:/.test(m.file_url)) return m.file_url;
-    if (!publicBase) throw new Error('Set PUBLIC_BASE_URL so Meta can fetch the media file.');
+    if (!publicBase) throw new Error('Instagram fetches media from a public web address. Set the public https address in Settings › Facebook and Instagram.');
     return `${publicBase}/${m.file_url.replace(/^\//, '')}`;
   };
+  // Facebook accepts the file itself, so it works even when this server is not public.
+  function upload(file, fields) {
+    const form = new FormData();
+    for (const [k, val] of Object.entries(fields)) form.append(k, val);
+    form.append('source', new Blob([fs.readFileSync(file)]), path.basename(file));
+    return form;
+  }
   return {
     available: true,
     async publish(post, media) {
       const ids = {};
-      const url = mediaUrl(media);
       const video = media.kind === 'video';
       if (post.platforms.includes('facebook')) {
-        const data = video
-          ? await http(g(`${pageId}/videos`), { method: 'POST', body: { file_url: url, description: post.caption_fb, access_token: token }, timeout: 120000 })
-          : await http(g(`${pageId}/photos`), { method: 'POST', body: { url, caption: post.caption_fb, access_token: token } });
+        const file = localFile(media);
+        let data;
+        if (file && fs.existsSync(file)) {
+          data = video
+            ? await http(`https://graph-video.facebook.com/${v}/${pageId}/videos`, { method: 'POST', body: upload(file, { description: post.caption_fb, access_token: token }), timeout: 300000 })
+            : await http(g(`${pageId}/photos`), { method: 'POST', body: upload(file, { caption: post.caption_fb, access_token: token }), timeout: 120000 });
+        } else {
+          const url = publicUrl(media);
+          data = video
+            ? await http(g(`${pageId}/videos`), { method: 'POST', body: { file_url: url, description: post.caption_fb, access_token: token }, timeout: 120000 })
+            : await http(g(`${pageId}/photos`), { method: 'POST', body: { url, caption: post.caption_fb, access_token: token } });
+        }
         ids.facebook = data.post_id || data.id;
       }
       if (post.platforms.includes('instagram')) {
-        if (!igId) throw new Error('Set META_IG_USER_ID to publish to Instagram.');
+        if (!igId) throw new Error('No Instagram professional account is linked to this Facebook Page.');
+        const url = publicUrl(media);
         const container = await http(g(`${igId}/media`), {
           method: 'POST',
-          body: video ? { media_type: 'REELS', video_url: url, caption: post.caption_ig, access_token: token } : { image_url: url, caption: post.caption_ig, ...(env('META_IG_ALT_TEXT') === '1' ? { alt_text: post.alt_text } : {}), access_token: token },
+          body: video ? { media_type: 'REELS', video_url: url, caption: post.caption_ig, access_token: token } : { image_url: url, caption: post.caption_ig, ...(cfg('META_IG_ALT_TEXT') === '1' ? { alt_text: post.alt_text } : {}), access_token: token },
         });
-        if (video) {
-          for (let i = 0; i < 30; i++) {
-            const s = await http(g(`${container.id}?fields=status_code&access_token=${encodeURIComponent(token)}`));
-            if (s.status_code === 'FINISHED') break;
-            if (s.status_code === 'ERROR') throw new Error('Instagram could not process the video.');
-            await new Promise((r) => setTimeout(r, 5000));
-          }
+        for (let i = 0; i < 30; i++) {
+          const st = await http(g(`${container.id}?fields=status_code&access_token=${encodeURIComponent(token)}`));
+          if (st.status_code === 'FINISHED' || (!video && !st.status_code)) break;
+          if (st.status_code === 'ERROR') throw new Error('Instagram could not process this media.');
+          await new Promise((r) => setTimeout(r, video ? 5000 : 2000));
         }
         const done = await http(g(`${igId}/media_publish`), { method: 'POST', body: { creation_id: container.id, access_token: token } });
         ids.instagram = done.id;
       }
       return ids;
+    },
+    // Read-only check used by Settings.
+    async check() {
+      const page = await http(g(`${pageId}?fields=name,followers_count&access_token=${encodeURIComponent(token)}`));
+      let ig = null;
+      if (igId) ig = await http(g(`${igId}?fields=username,followers_count&access_token=${encodeURIComponent(token)}`));
+      return { page, ig };
     },
   };
 }
@@ -254,8 +278,8 @@ function grantsGov() {
   };
 }
 
-function places() {
-  const key = env('GOOGLE_PLACES_API_KEY');
+function places(cfg) {
+  const key = cfg('GOOGLE_PLACES_API_KEY');
   if (!key) return { available: false };
   return {
     available: true,
@@ -276,15 +300,16 @@ function places() {
 
 // ---------------------------------------------------------------------------
 
-export function createIntegrations({ dataDir, settings }) {
-  const token = googleAuth();
+export function createIntegrations({ dataDir, settings, cfg = env }) {
+  const token = googleAuth(cfg);
   const docsLive = token ? docs(token) : { available: false };
   return {
     mode: 'live',
-    gmail: token ? gmail(token, settings) : { available: false },
+    googleToken: token,
+    gmail: token ? gmail(token, settings, cfg) : { available: false },
     docs: { ...docsLive, fallback: docsFallback(dataDir) },
-    meta: meta(dataDir),
+    meta: meta(dataDir, cfg),
     grantsgov: grantsGov(),
-    places: places(),
+    places: places(cfg),
   };
 }

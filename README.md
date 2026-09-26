@@ -26,19 +26,26 @@ Run `npm run check` to test the guarantees: approval gate, roles, CAN-SPAM, mino
 
 ## Connect your accounts
 
-Copy `.env.example` to `.env` and fill in what you have. Every connection is optional; each one turns on when its keys are present, and keys never reach the browser.
+Sign in as Leila, open **Settings › Connect your accounts**, and follow the steps on each card. Keys and sign-ins are saved on the server in `data/secrets.json` (readable only by the server, never sent back to the browser, never included in data exports). Values set there win over the same names in `.env`.
 
-| Connection | What it does | Settings |
+| Connection | What you do | What it enables |
 | --- | --- | --- |
-| Ollama / Local AI | Free offline local LLM inference via Ollama (llama3.1, mistral, deepseek, qwen) or OpenAI-compatible local servers | Auto-detected at `http://localhost:11434` or set `OLLAMA_HOST` |
-| Claude | Drafting and review with Claude Sonnet 5, final grant drafts with Claude Opus 5.5, tagging and triage with Claude Haiku 4.5 (vision tags video frames every 2 seconds) | `ANTHROPIC_API_KEY` |
-| Gmail | Sends approved outreach from Team@hope-resuscitated.org, saves drafts, detects replies and "stop" opt-outs | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` |
-| Google Docs | Exports approved grant drafts with a character count per answer (also supports direct Markdown & Text downloads) | Same Google OAuth |
-| Meta | Publishes approved posts and Reels to the Facebook Page and Instagram | `META_PAGE_ID`, `META_PAGE_TOKEN`, `META_IG_USER_ID`, `PUBLIC_BASE_URL` |
-| Grants.gov | Federal grant search for Scout | On by default |
-| Google Places | Finds schools, churches, libraries and businesses for Prospect Scout | `GOOGLE_PLACES_API_KEY` |
+| **Claude** | Create an API key at console.anthropic.com, set a monthly spend limit, paste the key. It's checked against Anthropic before it's saved. | Drafting and review with Claude Sonnet 5, final grant drafts with Claude Opus 5.5, photo and video tagging with Claude Haiku 4.5 |
+| **Gmail and Google Docs** | In Google Cloud Console, enable the Gmail and Google Docs APIs, make an OAuth client (Web application) with the redirect URI shown on the card, paste its ID and secret, then **Connect Gmail** and sign in as Team@hope-resuscitated.org | Approved outreach sends from that account, Gmail drafts, reply and "stop" detection, grant export to Google Docs. **Send me a test email** confirms it. |
+| **Facebook and Instagram** | Create a Meta app with Facebook Login, add the redirect URI shown on the card, give Leila and Cierra app roles, link the Instagram professional account to the Page, paste the App ID and secret, then **Connect Facebook** and pick the Page | Approved posts and Reels publish to the Page and its Instagram account |
 
-Without Claude, the agents draft from templates built only from the knowledge base and locked facts. Without Google Docs, approved drafts export as Word files. Meta publishing needs App Review for `pages_manage_posts` and `instagram_content_publish`, so apply early.
+Things to know:
+
+- **Google consent screen:** use **Internal** for a Google Workspace account. With **External** in testing mode, Google ends the sign-in after 7 days until the app is published.
+- **Meta roles:** while the Meta app stays in development mode, people with a role on it can post to Pages they manage. App Review is only needed for anyone beyond that.
+- **Facebook posts** upload the file directly, so they work even on a laptop.
+- **Instagram** fetches media from a public web address, so Hope Studio must run on a server with an https domain. Set it on the Facebook card or as `PUBLIC_BASE_URL`, and use that domain in both redirect URIs.
+- **Other connections:** Grants.gov is on by default. Google Places is `GOOGLE_PLACES_API_KEY` in `.env`.
+
+Other engines and connections, set in `.env`:
+
+- **Ollama / local AI:** free offline inference via Ollama (llama3.1, mistral, deepseek, qwen) or an OpenAI-compatible local server. It's auto-detected at `http://localhost:11434`, or set `OLLAMA_HOST`. `LLM_PROVIDER` picks the engine when several are available. A Claude key saved in Settings is used unless `LLM_PROVIDER` says otherwise.
+- **Google Docs** also supports direct Markdown and text downloads.
 
 ## What's in it
 

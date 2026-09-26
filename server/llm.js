@@ -7,9 +7,10 @@
 import { MODELS } from '../web/core/schema.js';
 import { env } from './env.js';
 
-export async function createLlm() {
-  const provider = (env('LLM_PROVIDER') || '').toLowerCase();
-  const anthropicKey = env('ANTHROPIC_API_KEY');
+// cfg reads a setting: values saved in Settings › Connect your accounts first, then .env.
+export async function createLlm(cfg = env) {
+  const provider = (cfg('LLM_PROVIDER') || '').toLowerCase();
+  const anthropicKey = cfg('ANTHROPIC_API_KEY');
   const openaiKey = env('OPENAI_API_KEY');
   const openaiBase = env('OPENAI_BASE_URL') || env('LOCAL_LLM_URL') || env('LM_STUDIO_URL');
   const ollamaHost = (env('OLLAMA_HOST') || env('OLLAMA_BASE_URL') || 'http://localhost:11434').replace(/\/$/, '');
@@ -241,7 +242,7 @@ async function createAnthropicLlm(apiKey) {
   try {
     ({ default: Anthropic } = await import('@anthropic-ai/sdk'));
   } catch {
-    return { available: false, provider: 'anthropic', reason: 'Run `npm install` in hope-studio/ to add @anthropic-ai/sdk.' };
+    return { available: false, provider: 'anthropic', reason: 'Run `npm install` in hope-studio/ to add the Anthropic SDK.' };
   }
   const client = new Anthropic({ apiKey, maxRetries: 2 });
   const models = {
@@ -320,6 +321,11 @@ async function createAnthropicLlm(apiKey) {
       });
       const msg = await stream.finalMessage();
       return textOf(msg);
+    },
+    // Confirms the key works without spending tokens (Settings › Claude).
+    async check() {
+      const page = await client.models.list({ limit: 20 });
+      return (page.data || []).map((m) => m.id);
     },
     async test() {
       try {

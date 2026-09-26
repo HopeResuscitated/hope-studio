@@ -420,6 +420,12 @@ window.addEventListener('hashchange', () => render());
     return;
   }
   document.body.dataset.mode = app.api.mode;
+  // Back from Google or Facebook sign-in.
+  const q = new URLSearchParams(location.search);
+  if (q.has('connected') || q.has('connect_error')) {
+    history.replaceState(null, '', location.pathname + location.hash);
+    setTimeout(() => toast(q.get('msg') || q.get('connect_error'), q.has('connect_error') ? 'bad' : 'good'), 400);
+  }
   await render();
   document.body.classList.add('ready');
 })();
