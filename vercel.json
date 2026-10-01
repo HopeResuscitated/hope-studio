@@ -1,7 +1,1 @@
-{
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/", "destination": "/web/index.html" },
-    { "source": "/(.*)", "destination": "/web/$1" }
-  ]
-}
+{"rewrites": [{"source": "/api/(.*)", "destination": "https://hope-studio.onrender.com/api/$1"}, {"source": "/media/(.*)", "destination": "https://hope-studio.onrender.com/media/$1"}, {"source": "/", "destination": "/web/index.html"}, {"source": "/(.*)", "destination": "/web/$1"}]}
