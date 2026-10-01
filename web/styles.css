@@ -809,6 +809,13 @@ input[type="checkbox"], input[type="radio"] { min-height: 0; width: 18px; height
   .crm-layout { grid-template-columns: minmax(0, 1fr); }
   .crm-list { max-height: 420px; }
 }
+.conn-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.conn-card { gap: 12px; }
+.steps { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 8px; line-height: 1.5; }
+.steps li::marker { font-weight: 700; color: var(--signal); }
+.copy-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.copy-code { word-break: break-all; padding: 4px 8px; }
+@media (max-width: 1320px) { .conn-grid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); } }
 
 /* ---------- Dialogs, toasts, login ---------- */
 
@@ -868,4 +875,27 @@ body.loading .page { cursor: progress; }
   .impact-grid { grid-template-columns: minmax(0, 1fr); }
   .page-head .btn { width: 100%; }
   .dl > div { grid-template-columns: 96px minmax(0, 1fr); }
+}
+
+/* ---------- Phone tab bar and installed-app mode ---------- */
+.tabbar { display: none; }
+@media (max-width: 900px) {
+  .tabbar {
+    display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 22;
+    background: var(--paper); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -4px 16px rgba(35, 26, 58, .06);
+  }
+  .tabbar a, .tabbar button {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 56px; border: 0; background: none; color: var(--muted); font: 600 11px var(--body); text-decoration: none; cursor: pointer;
+  }
+  .tabbar .on { color: var(--heading); }
+  .tabbar .on::before { content: ""; position: absolute; top: 0; left: 28%; right: 28%; height: 3px; border-radius: 0 0 3px 3px; background: var(--signal); }
+  .tab-badge { position: absolute; top: 6px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--verify); color: #fff; font: 700 10.5px/18px var(--body); text-align: center; }
+  .page { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+  .toasts { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  body.signed-out .tabbar { display: none; }
+}
+@media (display-mode: standalone) {
+  .skip { display: none; }
 }

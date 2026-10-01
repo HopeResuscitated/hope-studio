@@ -1,0 +1,43 @@
+{
+  "name": "Hope Studio",
+  "short_name": "Hope Studio",
+  "description": "Hope Resuscitated's Grant, Outreach and Social agents. Nothing goes out without your OK.",
+  "start_url": "./#inbox",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F7F5FB",
+  "theme_color": "#382665",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Approvals inbox",
+      "url": "./#inbox"
+    },
+    {
+      "name": "Social this week",
+      "url": "./#s-week"
+    },
+    {
+      "name": "Outreach this week",
+      "url": "./#o-week"
+    }
+  ]
+}

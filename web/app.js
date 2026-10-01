@@ -110,6 +110,18 @@ function demoBar() {
   </div>`;
 }
 
+// Phone tab bar: the approvals inbox and each studio one tap away.
+function tabbar() {
+  const st = studioOf(app.route);
+  const c = app.me.counts;
+  const tab = (href, label, ic, on, n) => html`<a href="#${href}" class="${on ? 'on' : ''}"${on ? ' aria-current="page"' : ''}>${icon(ic, 20)}<span>${label}</span>${n ? html`<b class="tab-badge">${n}</b>` : ''}</a>`;
+  return html`${tab('inbox', 'Inbox', 'inbox', app.route === 'inbox', c.inbox)}
+    ${tab('g-week', 'Grants', 'doc', st?.key === 'grant', c.grant)}
+    ${tab('o-week', 'Outreach', 'mail', st?.key === 'outreach', c.outreach)}
+    ${tab('s-week', 'Social', 'photo', st?.key === 'social', c.social)}
+    <button type="button" data-action="menu" aria-label="More">${icon('menu', 20)}<span>More</span></button>`;
+}
+
 async function render({ scrollTop = false } = {}) {
   const seq = ++renderSeq;
   const route = (location.hash.slice(1) || store.get('lastRoute', 'g-week')).split('~')[0];
@@ -127,6 +139,7 @@ async function render({ scrollTop = false } = {}) {
     if (seq !== renderSeq) return;
     app.me = me;
     $('#side').innerHTML = String(sidebar());
+    $('#tabbar').innerHTML = String(tabbar());
     $('#demo').innerHTML = String(demoBar());
     const focusId = !changed && document.activeElement?.id;
     main.innerHTML = String(SCREENS[screen].render(data, app));
@@ -420,8 +433,18 @@ window.addEventListener('hashchange', () => render());
     return;
   }
   document.body.dataset.mode = app.api.mode;
+  // Back from Google or Facebook sign-in.
+  const q = new URLSearchParams(location.search);
+  if (q.has('connected') || q.has('connect_error')) {
+    history.replaceState(null, '', location.pathname + location.hash);
+    setTimeout(() => toast(q.get('msg') || q.get('connect_error'), q.has('connect_error') ? 'bad' : 'good'), 400);
+  }
   await render();
   document.body.classList.add('ready');
+  // Installable app and an offline shell (only where the browser allows it).
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* previews and some embeds refuse this */ });
+  }
 })();
 
 export { raw };

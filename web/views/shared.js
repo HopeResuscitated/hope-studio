@@ -1,6 +1,7 @@
 // Shared screens: Approvals inbox · Activity (runs, audit log, alerts) · Settings
 
 import { html, icon, chip, fdate, ago, dialog, field, toast, plural, money, esc, copyText } from '../ui.js';
+import { connectionsSection, connectionSubmits, connectionActions, connectionChanges } from './connections.js';
 
 const AGENT_TAB = [['all', 'All agents'], ['grant', 'Grants'], ['outreach', 'Outreach'], ['social', 'Social']];
 const GROUPS = [
@@ -108,18 +109,14 @@ const activity = {
 
 // ---------------------------------------------------------------------------
 
-const INTEGRATIONS = [
-  ['claude', 'Claude (Anthropic API)', 'Drafting and review with Claude Sonnet 5, final grant drafts with Claude Opus 5.5, tagging with Claude Haiku 4.5. Without it, agents draft from templates built on your knowledge base.', 'ANTHROPIC_API_KEY'],
-  ['gmail', 'Gmail', 'Sends approved outreach from Team@hope-resuscitated.org, saves drafts, and detects replies.', 'GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN'],
-  ['docs', 'Google Docs', 'Exports approved grant drafts with a character count per answer. Without it, drafts save as Word files.', 'Same Google OAuth as Gmail'],
-  ['meta', 'Meta (Instagram + Facebook)', 'Publishes approved posts and Reels. Needs an Instagram Business account linked to the Facebook Page, and App Review for publishing permissions.', 'META_PAGE_ID, META_PAGE_TOKEN, META_IG_USER_ID, PUBLIC_BASE_URL'],
-  ['grantsgov', 'Grants.gov', 'Federal grant search for the Monday Scout run. Public API.', 'On by default (GRANTS_GOV=0 turns it off)'],
-  ['places', 'Google Places', 'Finds schools, churches, libraries and businesses in the Capital Region for Prospect Scout.', 'GOOGLE_PLACES_API_KEY'],
-];
 
 const settings = {
   title: 'Settings',
-  load: (app) => app.call('settings'),
+  async load(app) {
+    const d = await app.call('settings');
+    if (app.mode === 'live') d.conn = await app.api.connections().catch(() => null);
+    return d;
+  },
   render(d, app) {
     const s = d.settings;
     const admin = app.me.user.role === 'admin';
@@ -175,11 +172,7 @@ const settings = {
           <span>AI Engine is active. Local Ollama models and offline templates are ready for zero-cost autonomous drafting.</span>
         </div>
       </section>
-      <section class="card stack-s span-2" aria-labelledby="int-h">
-        <h2 class="section-title" id="int-h">Connections</h2>
-        <p class="muted small">${d.mode === 'demo' ? 'This is the in-browser demo: sample feeds stand in for Grants.gov and Places, and nothing is actually emailed or posted. Run the server to connect real accounts.' : 'Credentials live in the server\'s .env file and never reach the browser.'}</p>
-        <ul class="int-list">${INTEGRATIONS.map(([k, name, what, keys]) => html`<li><span class="int-state">${d.integrations[k] ? chip(d.mode === 'demo' && ['grantsgov', 'places'].includes(k) ? 'Sample feed' : 'Connected', 'good') : chip('Off', 'muted')}</span><span class="stack-xs"><strong>${name}</strong><span class="small">${what}</span><span class="muted small">Set: <code>${keys}</code></span></span></li>`)}</ul>
-      </section>
+      ${connectionsSection(d, app)}
       <section class="card stack-s" aria-labelledby="users-h">
         <h2 class="section-title" id="users-h">People</h2>
         <ul class="plain">${d.users.map((u) => html`<li><strong>${u.name}</strong> · ${u.role === 'admin' ? 'Admin and approver' : 'Approver'} · <code>${u.username}</code></li>`)}</ul>
@@ -196,7 +189,9 @@ const settings = {
       </section>
     </div>`;
   },
+  changes: connectionChanges,
   submits: {
+    ...connectionSubmits,
     async saveEmail(data, app) {
       await app.call('updateSettings', { patch: { mailing_address: data.mailing_address.trim(), sender: { name: data.sender_name, title: data.sender_title, email: data.sender_email } } });
       toast('Saved. Unsent emails were re-checked.');
@@ -250,6 +245,7 @@ const settings = {
         toast(`Test failed: ${err.message}`, 'bad');
       }
     },
+    ...connectionActions,
     async clearSamples(el, app) {
       const ok = await dialog({ title: 'Clear sample data?', submit: 'Clear samples', body: html`<p>This removes the sample grants, prospects, partners, media and posts. Your knowledge base, facts, settings and audit log stay.</p>` });
       if (!ok) return;

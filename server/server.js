@@ -10,13 +10,20 @@ import { fileAdapter, backup } from './db.js';
 import { hashPassword, verifyPassword, randomPassword, createSessions, parseCookies, createThrottle } from './auth.js';
 import { createLlm } from './llm.js';
 import { createIntegrations } from './integrations.js';
+import { createSecrets } from './secrets.js';
+import { createConnections } from './connections.js';
 import { startScheduler } from './scheduler.js';
 import { createStore } from '../web/core/store.js';
 import { createService, publicUser } from '../web/core/service.js';
 import { seedAll, seedCore } from '../web/core/seed.js';
-import { raiseAlert } from '../web/core/audit.js';
+import { raiseAlert, audit } from '../web/core/audit.js';
 
 loadEnv();
+// On Render or Railway, use the address they assign so sign-in redirects and Instagram media URLs are right.
+if (!process.env.PUBLIC_BASE_URL) {
+  const hosted = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '');
+  if (hosted) process.env.PUBLIC_BASE_URL = hosted;
+}
 const PORT = +env('PORT', '8787');
 const HOST = env('HOST', '0.0.0.0');
 const DATA_DIR = path.resolve(ROOT, env('DATA_DIR', 'data'));
@@ -32,7 +39,9 @@ fs.mkdirSync(MEDIA_DIR, { recursive: true });
 const adapter = fileAdapter(DATA_DIR);
 const store = createStore(adapter);
 const seeded = store.load();
-const integrations = createIntegrations({ dataDir: DATA_DIR, settings: () => store.settings() });
+const secrets = createSecrets(DATA_DIR);
+const buildIntegrations = () => createIntegrations({ dataDir: DATA_DIR, settings: () => store.settings(), cfg: secrets.cfg });
+const integrations = buildIntegrations();
 if (!seeded) {
   if (env('SEED_SAMPLES', '1') === '1') await seedAll(store, integrations);
   else { seedCore(store); store.setMeta({ seeded: true, seeded_at: new Date().toISOString(), samples: false }); }
@@ -49,12 +58,25 @@ for (const u of store.all('users', (x) => !x.password_hash)) {
 }
 store.flush();
 
-const llm = await createLlm();
+// Connections can change while the server runs (Settings › Connections), so the
+// service gets stable objects whose insides are swapped on reload.
+let llmImpl = await createLlm(secrets.cfg);
+// Everything reads through to whichever engine is active (Claude, Ollama, OpenAI-compatible or offline).
+const llm = new Proxy({}, {
+  get: (_, key) => (typeof llmImpl[key] === 'function' ? llmImpl[key].bind(llmImpl) : llmImpl[key]),
+  has: (_, key) => key in llmImpl,
+});
+async function reload() {
+  llmImpl = await createLlm(secrets.cfg);
+  for (const k of Object.keys(integrations)) delete integrations[k];
+  Object.assign(integrations, buildIntegrations());
+}
 const service = createService({ store, llm, integrations });
+const connections = createConnections({ secrets, reload, llmRef: () => llmImpl, integrations });
 const sessions = createSessions(+env('SESSION_DAYS', '14'));
 const throttle = createThrottle();
 
-console.log(`Claude: ${llm.available ? 'connected' : `off (${llm.reason})`}`);
+console.log(`AI engine: ${llm.available ? llm.provider || 'connected' : `offline templates (${llm.reason} Connect Claude in Settings.)`}`);
 for (const [k, v] of Object.entries({ Gmail: integrations.gmail, 'Google Docs': integrations.docs, Meta: integrations.meta, 'Grants.gov': integrations.grantsgov, 'Google Places': integrations.places })) {
   console.log(`${k}: ${v.available ? 'connected' : 'off'}`);
 }
@@ -66,7 +88,7 @@ const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.webp': 'image/webp', '.gif': 'image/gif', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.heic': 'image/heic',
-  '.doc': 'application/msword', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+  '.doc': 'application/msword', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json',
 };
 
 const SECURITY = {
@@ -117,6 +139,10 @@ function safeJoin(base, rel) {
   return p.startsWith(base + path.sep) || p === base ? p : null;
 }
 
+function raiseAudit(user, action, note) {
+  audit(store, { actor: user, action, note });
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 
@@ -150,6 +176,24 @@ const server = http.createServer(async (req, res) => {
       return file ? serveFile(res, file, { 'Cache-Control': 'public, max-age=31536000, immutable' }) : send(res, 404, { error: 'Not found' });
     }
 
+    // Google and Facebook sign-in: start (admin only) and return trip.
+    const oauth = p.match(/^\/api\/oauth\/(google|meta)\/(start|callback)$/);
+    if (oauth && req.method === 'GET') {
+      const user = currentUser(req);
+      const [, provider, step] = oauth;
+      const back = (q) => { res.writeHead(302, { Location: `/?${new URLSearchParams(q)}#settings` }); res.end(); };
+      if (!user) return back({ connect_error: 'Sign in first, then connect from Settings.' });
+      if (user.role !== 'admin') return back({ connect_error: 'Only Leila (admin) can connect accounts.' });
+      try {
+        if (step === 'start') { res.writeHead(302, { Location: connections.start[provider](req, user) }); return res.end(); }
+        const message = await connections.callback[provider](req, user, url);
+        raiseAudit(user, `connection.${provider}`, message);
+        return back({ connected: provider, msg: message });
+      } catch (err) {
+        return back({ connect_error: err.message });
+      }
+    }
+
     if (p.startsWith('/api/')) {
       const user = currentUser(req);
       // Mutating API calls must come from the app (CSRF guard on top of SameSite cookies).
@@ -163,6 +207,18 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { result: result === undefined ? null : result });
       }
       if (!user) return send(res, 401, { error: 'Sign in first.' });
+
+      if (p === '/api/connections' && req.method === 'GET') return send(res, 200, connections.status(req));
+      const conn = p.match(/^\/api\/connections\/([a-z]+(?:\/[a-z]+)?)$/);
+      if (conn && req.method === 'POST') {
+        if (user.role !== 'admin') return send(res, 403, { error: 'Only Leila (admin) can change connections.' });
+        const action = connections.actions[conn[1]];
+        if (!action) return send(res, 404, { error: 'Not found' });
+        const body = JSON.parse((await readBody(req, 100000)).toString() || '{}');
+        const result = await action(body, user);
+        if (!conn[1].endsWith('/test')) raiseAudit(user, `connection.${conn[1].replace('/', '.')}`, '');
+        return send(res, 200, { result });
+      }
 
       if (p === '/api/upload' && req.method === 'POST') {
         const name = String(req.headers['x-file-name'] || 'upload');
