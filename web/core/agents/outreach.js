@@ -604,6 +604,12 @@ export async function updateMessage(ctx, messageId, patch) {
 
 export async function sendMessage(ctx, messageId) {
   const { store, integrations } = ctx;
+  if (store.settings().outbound_email_enabled !== true) {
+    throw Object.assign(new Error('Outbound email is disabled. Enable it explicitly in Settings before sending.'), { status: 409 });
+  }
+  if (!integrations.gmail?.available) {
+    throw Object.assign(new Error('Gmail is not connected. No email was sent.'), { status: 409 });
+  }
   assertApproved(store, 'message', messageId);
   const m = store.get('messages', messageId);
   if (m.status === 'sent') return m;
