@@ -323,6 +323,15 @@ document.addEventListener('keydown', (ev) => {
   }
 });
 
+// Cards and rows that act like buttons (data-action on a non-button) work from the keyboard too.
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const el = ev.target.closest?.('[data-action][tabindex]');
+  if (!el || el !== ev.target || ['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return;
+  ev.preventDefault();
+  el.click();
+});
+
 function handler(kind, name) {
   const screen = SCREENS[app.route];
   return screen?.[kind]?.[name] || null;
