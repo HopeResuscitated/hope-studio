@@ -27,12 +27,17 @@ export function createStore(adapter = {}) {
     return { schema: 1, tables, settings: {}, meta: {} };
   }
 
-  function load() {
-    const loaded = adapter.load ? adapter.load() : null;
-    data = loaded && loaded.tables ? loaded : empty();
+  // Older saves and backups may lack tables added since; make sure every table exists.
+  function backfill() {
     for (const t of TABLES) data.tables[t] ||= [];
     data.settings ||= {};
     data.meta ||= {};
+  }
+
+  function load() {
+    const loaded = adapter.load ? adapter.load() : null;
+    data = loaded && loaded.tables ? loaded : empty();
+    backfill();
     return !!(loaded && loaded.tables && loaded.meta?.seeded);
   }
 
@@ -65,6 +70,7 @@ export function createStore(adapter = {}) {
     flush,
     get version() { return version; },
     get raw() { return data; },
+    backfill,
     replace(next) { data = next; for (const t of TABLES) data.tables[t] ||= []; scheduleSave(); },
     reset() { data = empty(); scheduleSave(); },
     addGuard(fn) { guards.push(fn); },

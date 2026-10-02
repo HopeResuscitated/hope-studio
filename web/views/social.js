@@ -126,7 +126,7 @@ const library = {
   title: 'Social · Library',
   async load(app) {
     const d = await app.call('library', { filter: app.pref('mediaFilter', 'all') });
-    d.prompts = (await app.call('prompts')).prompts;
+    d.prompts = await app.call('prompts').then((r) => r.prompts).catch(() => []);
     return d;
   },
   render(d, app) {

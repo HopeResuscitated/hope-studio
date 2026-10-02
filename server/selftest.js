@@ -269,3 +269,24 @@ test('a post drafted from a prompt waits for a person and cannot be published', 
   assert.notEqual(approvalFor(store, 'post', id).state, 'executed');
   await assert.rejects(svc.call('draftFromPrompt', { media_id: 'nope', prompt_id: prompts[0].id }, leila), /Pick a photo/);
 });
+
+test('restoring a backup made before the prompt library still works', async () => {
+  const { store, svc, leila } = await fresh();
+  const old = JSON.parse(JSON.stringify(store.raw));
+  delete old.tables.prompts;
+  delete old.meta.prompts_seeded;
+  await svc.call('importData', { data: old }, leila);
+  const { prompts } = await svc.call('prompts', {}, leila);
+  assert.ok(prompts.length >= 5, 'prompts table is rebuilt and starter prompts are added');
+});
+
+test('prompt drafts reject bad input and excluded media', async () => {
+  const { store, svc, leila } = await fresh();
+  const { prompts } = await svc.call('prompts', {}, leila);
+  const media = store.all('media_assets')[0];
+  await svc.call('excludeMedia', { id: media.id }, leila);
+  await assert.rejects(svc.call('draftFromPrompt', { media_id: media.id, prompt_id: prompts[0].id }, leila), /Pick a photo/);
+  await assert.rejects(svc.call('savePrompt', { label: 'x', text: 'y'.repeat(600), pillar: 'Educate' }, leila), /too long/i);
+  await assert.rejects(svc.call('savePrompt', { id: 'nope', label: 'x', text: 'y', pillar: 'Educate' }, leila), /not found/i);
+  assert.deepEqual(await svc.call('deletePrompt', { id: 'nope' }, leila), { ok: false });
+});
