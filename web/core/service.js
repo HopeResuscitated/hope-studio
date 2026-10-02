@@ -661,22 +661,29 @@ export function createService({ store, llm = { available: false }, integrations 
     return { ok: true };
   });
   // Pair a prompt with a photo or video. The draft lands in the next open slot and still needs a person's OK.
-  def('draftFromPrompt', 'user', async ({ media_id, prompt_id }, ctx) => {
+  // Draft a post from a library item. A prompt is optional; a slot (YYYY-MM-DD) can be chosen, otherwise the next open one is used.
+  // Either way it waits in Approvals like every other post.
+  def('draftFromPrompt', 'user', async ({ media_id, prompt_id, slot: slotKey }, ctx) => {
     const media = store.get('media_assets', media_id);
-    const prompt = store.get('prompts', prompt_id);
-    if (!media || media.excluded || !prompt) throw Object.assign(new Error('Pick a photo or video and a prompt.'), { status: 400 });
-    if (promptDraftBusy) throw Object.assign(new Error('Another prompt draft is still being written. Try again in a moment.'), { status: 409 });
+    const prompt = prompt_id ? store.get('prompts', prompt_id) : null;
+    if (!media || media.excluded || (prompt_id && !prompt)) throw Object.assign(new Error('Pick a photo or video and a prompt.'), { status: 400 });
+    if (promptDraftBusy) throw Object.assign(new Error('Another draft is still being written. Try again in a moment.'), { status: 409 });
     promptDraftBusy = true;
     try {
-    const key = S.planningMonth();
-    let slot = null;
-    for (const k of [key, addMonths(key, 1), addMonths(key, 2)]) {
-      slot = S.monthPlan(store, k).open[0];
-      if (slot) break;
-    }
-    if (!slot) throw Object.assign(new Error('No open slots in the next three months. Change the posting plan in Settings.'), { status: 409 });
-    const r = await withRun(ctx, 'social', 'prompt', (rc) => S.createPost(rc, media, slot.date, { topic: prompt.text }).then((post) => ({ summary: `Drafted "${post.title}" from the prompt "${prompt.label}"`, post })));
-    return { id: r.result.post.id };
+      let slot = null;
+      if (slotKey) {
+        slot = S.monthPlan(store, String(slotKey).slice(0, 7)).open.find((x) => x.key === slotKey);
+        if (!slot) throw Object.assign(new Error('That slot is no longer open.'), { status: 409 });
+      } else {
+        const key = S.planningMonth();
+        for (const k of [key, addMonths(key, 1), addMonths(key, 2)]) {
+          slot = S.monthPlan(store, k).open[0];
+          if (slot) break;
+        }
+        if (!slot) throw Object.assign(new Error('No open slots in the next three months. Change the posting plan in Settings.'), { status: 409 });
+      }
+      const r = await withRun(ctx, 'social', 'prompt', (rc) => S.createPost(rc, media, slot.date, { topic: prompt?.text || '' }).then((post) => ({ summary: `Drafted "${post.title}"${prompt ? ` from the prompt "${prompt.label}"` : ''}`, post })));
+      return { id: r.result.post.id };
     } finally { promptDraftBusy = false; }
   });
   def('uploadMedia', 'user', async (input, ctx) => (await withRun(ctx, 'social', 'upload', (r) => S.ingestMedia(r, input).then((m) => ({ summary: `Tagged ${m.label}`, m })))).result.m);
@@ -711,7 +718,7 @@ export function createService({ store, llm = { available: false }, integrations 
   });
   def('updatePost', 'user', ({ id, ...patch }, ctx) => S.updatePost(ctx, id, patch));
   def('rewriteCaption', 'user', async ({ id }, ctx) => (await withRun(ctx, 'social', 'rewrite', (r) => S.rewriteCaption(r, id).then(() => 'Rewrote caption'))).run);
-  def('swapMedia', 'user', ({ id, mediaId }, ctx) => S.swapMedia(ctx, id, { mediaId }));
+  def('swapMedia', 'user', ({ id, mediaId, keepCaption }, ctx) => S.swapMedia(ctx, id, { mediaId, keepCaption: !!keepCaption }));
   def('approvePost', 'approver', ({ id }, ctx) => S.approvePost(ctx, id));
   def('approveCleanPosts', 'approver', ({ key }, ctx) => ({ approved: S.approveCleanPosts(ctx, { key }) }));
   def('publishNow', 'approver', async (_, ctx) => ({ published: await S.publishQueue(ctx) }));

@@ -32,7 +32,7 @@ const inbox = {
     return html`<section class="inbox-group" aria-labelledby="g-${state}">
       <div class="row between"><h2 class="section-title" id="g-${state}">${label} <span class="count">${list.length}</span></h2>${collapsed ? html`<button type="button" class="link-btn" data-action="setPref" data-key="open-${state}" data-value="1">Show</button>` : ''}</div>
       ${note ? html`<p class="muted small">${note}</p>` : ''}
-      ${collapsed ? '' : html`<div class="table-wrap"><table class="table inbox-table">
+      ${collapsed ? '' : html`<div class="table-wrap" tabindex="0"><table class="table inbox-table">
         <thead><tr><th scope="col">Item</th><th scope="col">Agent</th><th scope="col">Reviewer</th><th scope="col">Updated</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
         <tbody>${list.slice(0, 60).map((r) => html`<tr>
           <td><button type="button" class="link-btn strong" data-action="go" data-route="${r.link.route}" data-id="${r.link.id}">${r.title}</button><div class="muted small">${r.detail?.when ? fdate(r.detail.when, { time: true }) + ' · ' : ''}${r.detail?.to || ''}${r.detail?.request ? money(r.detail.request) + ' request' : ''}${r.decided_by_name ? ` · ${state === 'rejected' ? 'rejected' : 'approved'} by ${r.decided_by_name}` : ''}</div></td>
@@ -82,14 +82,14 @@ const activity = {
     ${d.alerts.length ? html`<section aria-labelledby="alerts-h"><h2 class="section-title" id="alerts-h">Alerts</h2>${d.alerts.map((a) => html`<div class="banner ${a.level === 'critical' ? 'banner-bad' : ''}">${icon('alert')}<span class="grow"><strong>${a.title}</strong>${a.detail ? ` ${a.detail}` : ''} <span class="muted small">${ago(a.created_at)}</span></span><button type="button" class="btn btn-sm" data-action="resolveAlert" data-id="${a.id}">Resolve</button></div>`)}</section>` : ''}
     <section class="card" aria-labelledby="runs-h">
       <div class="card-top"><h2 class="section-title" id="runs-h">Agent runs</h2><span class="muted small">Model spend this month: $${d.spend.toFixed(2)}</span></div>
-      <div class="table-wrap"><table class="table"><thead><tr><th scope="col">Started</th><th scope="col">Agent</th><th scope="col">Trigger</th><th scope="col">Status</th><th scope="col">Summary</th><th scope="col" class="num">Cost</th></tr></thead>
+      <div class="table-wrap" tabindex="0"><table class="table"><thead><tr><th scope="col">Started</th><th scope="col">Agent</th><th scope="col">Trigger</th><th scope="col">Status</th><th scope="col">Summary</th><th scope="col" class="num">Cost</th></tr></thead>
       <tbody>${d.runs.map((r) => html`<tr><td class="nowrap small">${fdate(r.started_at, { time: true })}</td><td>${r.agent}</td><td>${r.trigger}</td><td>${chip(r.status.replace('_', ' '), r.status === 'succeeded' ? 'good' : r.status === 'running' ? 'info' : 'warn')}</td><td class="small">${r.summary}${r.log?.length ? html`<details><summary>Log (${r.log.length})</summary><ul class="small">${r.log.map((l) => html`<li>${l.line}</li>`)}</ul></details>` : ''}</td><td class="num small">$${(r.cost_usd || 0).toFixed(3)}</td></tr>`)}
       ${!d.runs.length ? html`<tr><td colspan="6" class="muted">No runs yet. The weekly run starts Mondays at 6:00 AM Central.</td></tr>` : ''}</tbody></table></div>
     </section>
     <section class="card" aria-labelledby="audit-h">
       <div class="card-top wrap"><h2 class="section-title" id="audit-h">Audit log</h2>
         <div class="filters" role="group" aria-label="Filter log">${[['all', 'All'], ['approval', 'Approvals'], ['outreach', 'Email'], ['post', 'Posts'], ['grant', 'Grants'], ['fact', 'Facts'], ['settings', 'Settings']].map(([k, l]) => html`<button type="button" aria-pressed="${t === k}" data-action="setPref" data-key="auditType" data-value="${k}">${l}</button>`)}</div></div>
-      <div class="table-wrap"><table class="table"><thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Item</th><th scope="col">Note</th></tr></thead>
+      <div class="table-wrap" tabindex="0"><table class="table"><thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Item</th><th scope="col">Note</th></tr></thead>
       <tbody>${d.audit.map((a) => html`<tr><td class="nowrap small">${fdate(a.created_at, { time: true })}</td><td class="nowrap">${a.actor}</td><td><code>${a.action}</code></td><td class="small">${a.item_type || ''}${a.after?.title ? ` · ${a.after.title}` : a.after?.label ? ` · ${a.after.label}` : a.before?.title ? ` · ${a.before.title}` : ''}</td><td class="small">${a.note || ''}</td></tr>`)}</tbody></table></div>
       ${d.total > d.audit.length ? html`<p class="muted small">Showing the latest ${d.audit.length} of ${d.total}. Export the CSV for everything.</p>` : ''}
     </section>`;

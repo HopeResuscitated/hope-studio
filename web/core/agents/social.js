@@ -274,16 +274,22 @@ export async function rewriteCaption(ctx, postId) {
   return updatePost(ctx, postId, { caption_ig: c.caption_ig, caption_fb: c.caption_fb });
 }
 
-export async function swapMedia(ctx, postId, { mediaId = null } = {}) {
+export async function swapMedia(ctx, postId, { mediaId = null, keepCaption = false } = {}) {
   const { store } = ctx;
   const post = store.get('posts', postId);
+  if (post.status === 'published') throw Object.assign(new Error('This post is already live.'), { status: 409 });
+  if (mediaId && store.get('media_assets', mediaId)?.excluded) throw Object.assign(new Error('That item is marked "Don\'t use".'), { status: 409 });
   const media = mediaId ? store.get('media_assets', mediaId)
     : pickMedia(store, { pillar: post.pillar, iso: post.scheduled_at, exclude: new Set([post.media_id]), ignorePostId: postId, avoidPeople: true })
       || pickMedia(store, { iso: post.scheduled_at, exclude: new Set([post.media_id]), ignorePostId: postId, avoidPeople: true });
   if (!media) throw Object.assign(new Error('No other media without people is free for this date. Upload a photo, or confirm a release.'), { status: 409 });
   const c = await writeCopy(ctx, media, { variant: post.variant || 0 });
   const before = post;
-  store.update('posts', postId, { media_id: media.id, pillar: media.pillar, title: c.title, caption_ig: c.caption_ig, caption_fb: c.caption_fb, alt_text: c.alt_text, citations: c.citations, reused_recently: false });
+  // Keep my caption: only the photo (and its alt text) changes, so nothing the person wrote is lost.
+  const patch = keepCaption
+    ? { media_id: media.id, pillar: media.pillar, alt_text: c.alt_text, reused_recently: false }
+    : { media_id: media.id, pillar: media.pillar, title: c.title, caption_ig: c.caption_ig, caption_fb: c.caption_fb, alt_text: c.alt_text, citations: c.citations, reused_recently: false };
+  store.update('posts', postId, patch);
   store.update('media_assets', media.id, { last_used_at: post.scheduled_at });
   audit(store, { actor: ctx.actor, action: 'post.swap_media', item_type: 'post', item_id: postId, before, after: store.get('posts', postId) });
   await reviewPost(ctx, postId);
