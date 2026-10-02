@@ -15,7 +15,7 @@ async function saveAddress(app, value) {
 const addressBanner = (app) => (app.me.needs_address ? html`
   <form class="banner banner-form" data-submit="saveAddress">${icon('alert')}
     <div class="grow"><strong>Add the mailing address for the CAN-SPAM footer.</strong> Every outreach email must carry a physical address and an opt-out line, so nothing sends until it's set.
-    ${app.me.user.role === 'admin' ? html`<div class="row gap-s mt-s"><label class="sr-only" for="addr">Mailing address</label><input id="addr" name="address" placeholder="Street or PO Box, St. Francisville, LA 70775" required><button type="submit" class="btn btn-primary btn-sm">Save address</button></div>` : html` Ask Leila to add it in Settings.`}</div>
+    ${app.me.user.role === 'admin' ? html`<div class="row gap-s mt-s wrap"><label class="sr-only" for="addr">Mailing address</label><input id="addr" name="address" placeholder="Street or PO Box, St. Francisville, LA 70775" required><button type="submit" class="btn btn-primary btn-sm">Save address</button></div>` : html` Ask Leila to add it in Settings.`}</div>
   </form>` : '');
 
 // ---------------------------------------------------------------------------

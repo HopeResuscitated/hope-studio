@@ -161,7 +161,7 @@ function showLogin() {
   $('#login').hidden = false;
   $('#login').innerHTML = String(html`<form class="login-card" id="login-form">
     <div class="side-brand">${logo(44)}<div class="wordmark"><span class="wm-top">HOPE</span><span class="wm-bottom">RESUSCITATED</span></div></div>
-    <h1>Hope Studio</h1><p class="muted">Grant, Outreach and Social agents. Nothing goes out without your OK.</p>
+    <h1>Hope Studio</h1><p class="muted">Grants, outreach and social in one place. Nothing goes out without your OK.</p>
     <div class="field"><label for="u">Username</label><input id="u" name="username" autocomplete="username" required autofocus></div>
     <div class="field"><label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
     <p class="form-error" id="login-error" role="alert"></p>

@@ -2,7 +2,7 @@
 // open without a connection. Network first, so updates show up right away;
 // the API and uploaded media are never cached.
 
-const CACHE = 'hope-studio-shell-v1';
+const CACHE = 'hope-studio-shell-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {

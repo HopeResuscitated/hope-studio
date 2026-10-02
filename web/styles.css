@@ -457,7 +457,10 @@ input[type="checkbox"], input[type="radio"] { min-height: 0; width: 18px; height
 }
 .icon-btn-text:hover { background: var(--deep-2); color: #fff; }
 
-.topbar-brand { display: flex; align-items: center; gap: 8px; flex: 1; }
+.topbar-brand { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.topbar-brand span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-actions { flex-shrink: 0; }
+.banner-form > div { min-width: 0; flex: 1; }
 .topbar-actions { display: flex; align-items: center; gap: 4px; }
 
 .cmd-palette {
@@ -933,3 +936,8 @@ body.loading .page { cursor: progress; }
 .prompt-card .section-title { margin: 0; }
 .prompt-card .btn { margin-top: auto; }
 .prompt-card > .row { width: 100%; }
+
+/* Headings take focus on navigation for screen readers; no ring needed. */
+main h1:focus, main h1:focus-visible { outline: none; }
+.demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 16px; font-size: 13px; }
+.demo-bar select { max-width: 200px; }
