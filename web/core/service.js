@@ -635,6 +635,7 @@ export function createService({ store, llm = { available: false }, integrations 
     ['Lead', 'Responder Corps', 'Spotlight the Hope Responder Corps and what students do.'],
     ['Lead', 'Upcoming event', 'Announce an upcoming training or build day. Add the date and place before approving.'],
   ];
+  let promptDraftBusy = false;
   def('prompts', 'user', () => {
     if (!store.meta().prompts_seeded) {
       for (const [pillar, label, text] of STARTER_PROMPTS) store.insert('prompts', { label, text, pillar, starter: true });
@@ -645,6 +646,8 @@ export function createService({ store, llm = { available: false }, integrations 
   def('savePrompt', 'user', ({ id, label, text, pillar }, ctx) => {
     label = String(label || '').trim(); text = String(text || '').trim();
     if (!label || !text) throw Object.assign(new Error('Give the prompt a name and some text.'), { status: 400 });
+    if (label.length > 80 || text.length > 500) throw Object.assign(new Error('That prompt is too long. Keep the name under 80 characters and the text under 500.'), { status: 400 });
+    if (id && !store.get('prompts', id)) throw Object.assign(new Error('Prompt not found.'), { status: 404 });
     if (!PILLARS.includes(pillar)) pillar = 'Educate';
     const after = id ? store.update('prompts', id, { label, text, pillar }) : store.insert('prompts', { label, text, pillar });
     audit(store, { actor: ctx.actor, action: id ? 'prompt.update' : 'prompt.add', item_type: 'prompt', item_id: after.id, note: label });
@@ -652,7 +655,7 @@ export function createService({ store, llm = { available: false }, integrations 
   });
   def('deletePrompt', 'user', ({ id }, ctx) => {
     const p = store.get('prompts', id);
-    if (!p) return null;
+    if (!p) return { ok: false };
     store.remove('prompts', id);
     audit(store, { actor: ctx.actor, action: 'prompt.delete', item_type: 'prompt', item_id: id, note: p.label });
     return { ok: true };
@@ -661,7 +664,10 @@ export function createService({ store, llm = { available: false }, integrations 
   def('draftFromPrompt', 'user', async ({ media_id, prompt_id }, ctx) => {
     const media = store.get('media_assets', media_id);
     const prompt = store.get('prompts', prompt_id);
-    if (!media || !prompt) throw Object.assign(new Error('Pick a photo or video and a prompt.'), { status: 400 });
+    if (!media || media.excluded || !prompt) throw Object.assign(new Error('Pick a photo or video and a prompt.'), { status: 400 });
+    if (promptDraftBusy) throw Object.assign(new Error('Another prompt draft is still being written. Try again in a moment.'), { status: 409 });
+    promptDraftBusy = true;
+    try {
     const key = S.planningMonth();
     let slot = null;
     for (const k of [key, addMonths(key, 1), addMonths(key, 2)]) {
@@ -671,6 +677,7 @@ export function createService({ store, llm = { available: false }, integrations 
     if (!slot) throw Object.assign(new Error('No open slots in the next three months. Change the posting plan in Settings.'), { status: 409 });
     const r = await withRun(ctx, 'social', 'prompt', (rc) => S.createPost(rc, media, slot.date, { topic: prompt.text }).then((post) => ({ summary: `Drafted "${post.title}" from the prompt "${prompt.label}"`, post })));
     return { id: r.result.post.id };
+    } finally { promptDraftBusy = false; }
   });
   def('uploadMedia', 'user', async (input, ctx) => (await withRun(ctx, 'social', 'upload', (r) => S.ingestMedia(r, input).then((m) => ({ summary: `Tagged ${m.label}`, m })))).result.m);
   def('updateMedia', 'user', async ({ id, ...patch }, ctx) => {
@@ -795,6 +802,7 @@ export function createService({ store, llm = { available: false }, integrations 
     }
     store.raw.tables = data.tables;
     if (data.meta) store.raw.meta = data.meta;
+    store.backfill();
     store.flush();
     audit(store, { actor: ctx.actor, action: 'data.import', note: 'Restored backup data' });
     return true;
