@@ -941,3 +941,51 @@ body.loading .page { cursor: progress; }
 main h1:focus, main h1:focus-visible { outline: none; }
 .demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 16px; font-size: 13px; }
 .demo-bar select { max-width: 200px; }
+
+/* ---------- Social overhaul ---------- */
+.only-narrow { display: none; }
+.cal-dow { display: none; font-weight: 500; color: var(--muted); }
+.slot-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.slot-chip { padding: 4px 10px; border-radius: 999px; background: var(--verify-soft); color: var(--verify); font: 700 12px var(--body); }
+.slot-chip.more { background: transparent; border: 1px solid var(--line-strong); color: var(--muted); }
+.lib-scrim, .sheet-close { display: none; }
+.composer-bar { gap: 12px; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.bar-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; }
+.bar-status.good { color: var(--tide); }
+.bar-status.warn { color: var(--verify); }
+
+@media (max-width: 900px) {
+  .only-wide { display: none !important; }
+  .only-narrow { display: flex; }
+  /* This week: what needs you comes first */
+  .cols.review-first > .col-side { order: -1; }
+  .post-row > .end { align-items: flex-start; }
+  /* Calendar: an agenda of the planned days instead of a 7-column grid */
+  .cal-wrap { overflow: visible; }
+  .cal { min-width: 0; grid-template-columns: 1fr; gap: 10px; }
+  .cal-wd, .cal-cell.blank, .cal-cell.idle { display: none; }
+  .cal-cell { min-height: 0; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; padding: 12px; }
+  .cal-day { flex: 0 0 64px; font-size: 15px; }
+  .cal-dow { display: inline; }
+  .cal-cell > .cal-chip, .cal-cell > .cal-open { flex: 1 1 180px; }
+  /* Library: details open as a bottom sheet */
+  .lib-sheet { display: none; }
+  .lib-sheet.open { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 31; max-height: 82vh; overflow-y: auto; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 40px rgba(0, 0, 0, .3); padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+  .lib-scrim.open { display: block; position: fixed; inset: 0; z-index: 30; background: rgba(20, 12, 40, .5); }
+  .sheet-close { display: inline-flex; align-self: flex-end; }
+  .dropzone { padding: 14px; gap: 12px; }
+  .dropzone .muted { display: none; }
+  .dz-icon { width: 40px; height: 40px; }
+  /* Composer: caption first, smaller preview, status + approve pinned above the tab bar */
+  .composer { display: flex; flex-direction: column; gap: 14px; }
+  .composer > section[aria-label="Caption"] { order: 1; }
+  .composer > .composer-bar { order: 2; position: sticky; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 20; }
+  .composer > aside.reviewer { order: 3; }
+  .composer > section[aria-label="Media and timing"] { order: 4; }
+  .preview.tall { aspect-ratio: 16 / 9; max-height: 200px; }
+}
+
+@media (max-width: 900px) {
+  .head-tools { flex-wrap: nowrap; }
+  .head-tools .btn { flex: 1 1 0; min-height: 40px; padding: 0 10px; font-size: 14px; }
+}

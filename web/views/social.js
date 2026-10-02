@@ -71,11 +71,12 @@ const week = {
         <span class="eyebrow">Social · ${d.month}</span>
         <h1>${d.stats.needsOk ? `${plural(d.stats.needsOk, 'post needs', 'posts need')} your OK.` : onTrack ? "You're on track." : 'A few slots need media.'}</h1>
       </div>
-      <button type="button" class="btn btn-primary" data-action="go" data-route="s-library">${icon('upload', 16)} Upload photos &amp; videos</button>
+      ${d.clean ? html`<button type="button" class="btn btn-primary" data-action="approveClean">${icon('check', 16)} Approve ${d.clean} clean ${d.clean === 1 ? 'post' : 'posts'}</button>`
+    : html`<button type="button" class="btn btn-primary" data-action="go" data-route="s-library">${icon('upload', 16)} Add photos &amp; videos</button>`}
     </header>
     <p class="statline" aria-label="Progress"><span><b>${d.stats.scheduled} of ${d.stats.total}</b> ${d.month} posts scheduled</span><span><b>${d.stats.weeks}</b> weeks on plan in a row</span><span><b>${d.stats.unused}</b> unused in library</span></p>
     <div class="bar bar-wide" role="img" aria-label="${pct}% scheduled"><span style="width:${pct}%"></span></div>
-    <div class="cols">
+    <div class="cols review-first">
       <section class="col-main" aria-labelledby="n7-h">
         <h2 class="section-title" id="n7-h">Next 7 days</h2>
         ${d.next7.length ? d.next7.map((p) => html`
@@ -100,7 +101,8 @@ const week = {
           <p class="small">Reviewer found nothing to fix. Approving schedules them; nothing goes live before its time.</p>
           <div class="row gap-s wrap"><button type="button" class="btn btn-primary btn-sm" data-action="approveClean">Approve ${d.clean}</button><button type="button" class="link-btn" data-action="go" data-route="s-calendar">Review on calendar</button></div></div>` : ''}
         ${d.open.length ? html`<div class="card note-card"><span class="chip chip-warn">${plural(d.open.length, 'open slot')}</span>
-          <p class="small">${d.open.map((o) => fdate(o.date, { weekday: false })).join(' and ')} ${d.open.length === 1 ? 'has' : 'have'} no media yet. The library is low on ${d.lowPillar} content, so upload a photo or two.</p>
+          <p class="small">No media yet. The library is low on ${d.lowPillar} content, so add a photo or two.</p>
+          <div class="slot-chips">${d.open.slice(0, 6).map((o) => html`<span class="slot-chip">${fdate(o.date, { weekday: false })}</span>`)}${d.open.length > 6 ? html`<span class="slot-chip more">+${d.open.length - 6} more</span>` : ''}</div>
           <div class="row gap-s wrap"><button type="button" class="btn btn-sm" data-action="autofill">Auto-fill</button><button type="button" class="link-btn" data-action="go" data-route="s-calendar">View calendar</button></div></div>` : ''}
         ${!d.flagged.length && !d.clean && !d.open.length ? html`<div class="card note-card"><p class="small">Nothing needs you right now.</p></div>` : ''}
       </aside>
@@ -121,6 +123,10 @@ const week = {
 };
 
 // ---------------------------------------------------------------------------
+
+// The details sheet (phones) is only open during a visit: it closes whenever you navigate.
+let libSheetOpen = false;
+window.addEventListener('hashchange', () => { libSheetOpen = false; });
 
 const library = {
   title: 'Social · Library',
@@ -164,7 +170,9 @@ const library = {
           ${!d.media.length ? html`<p class="muted">Nothing here yet.</p>` : ''}
         </div>
       </section>
-      ${sel ? html`<aside class="col-side card" aria-label="Selected item">
+      ${sel ? html`<div class="lib-scrim ${libSheetOpen ? 'open' : ''}" data-action="closeSheet" aria-hidden="true"></div>
+      <aside class="col-side card lib-sheet ${libSheetOpen ? 'open' : ''}" aria-label="Selected item">
+        <button type="button" class="btn btn-sm sheet-close" data-action="closeSheet">${icon('close', 16)} Close</button>
         ${sel.thumb ? html`<img class="preview" src="${sel.thumb}" alt="${sel.subject || sel.label}">` : html`<div class="preview ph">${sel.kind === 'video' ? 'Video' : 'Photo'}${sel.duration_s ? ` · 0:${String(Math.round(sel.duration_s)).padStart(2, '0')}` : ''} · ${sel.label}</div>`}
         <h2 class="section-title">What the agent sees</h2>
         <dl class="dl">
@@ -176,7 +184,7 @@ const library = {
           <div><dt>Tagged by</dt><dd>${sel.tag_source === 'vision' ? 'Claude (vision)' : sel.tag_source === 'sample' ? 'Sample data' : 'Filename (connect Claude for vision tags)'}</dd></div>
         </dl>
         ${sel.needsConsent ? html`<div class="fixbox"><p class="small">${sel.people_note || 'Confirm there are no people, or that you hold a signed release.'}</p><div class="row gap-s wrap"><button type="button" class="btn btn-primary btn-sm" data-action="consent" data-id="${sel.id}">I have permission</button><button type="button" class="btn btn-sm" data-action="noPeople" data-id="${sel.id}">No people in it</button></div></div>` : ''}
-        <div class="row gap-s wrap">${sel.uses.length ? html`<button type="button" class="btn btn-primary" data-action="go" data-route="s-composer" data-id="${sel.uses[0].id}">Edit post</button>` : ''}<button type="button" class="btn" data-action="exclude" data-id="${sel.id}">Don't use</button></div>
+        <div class="row gap-s wrap">${sel.uses.length ? html`<button type="button" class="btn btn-primary" data-action="go" data-route="s-composer" data-id="${sel.uses[0].id}">Edit post</button>` : ''}<button type="button" class="btn ${sel.uses.length ? '' : 'btn-primary'}" data-action="promptForMedia" data-id="${sel.id}">${icon('sparkle', 16)} Use a prompt</button><button type="button" class="btn btn-ghost" data-action="exclude" data-id="${sel.id}">Don't use</button></div>
       </aside>` : ''}
     </div>`}`;
   },
@@ -212,7 +220,20 @@ const library = {
       toast('Prompt deleted');
       app.refresh();
     },
-    selectMedia(el, app) { app.setSel('s-library', el.dataset.id); app.refresh(); },
+    selectMedia(el, app) { app.setSel('s-library', el.dataset.id); libSheetOpen = true; app.refresh(); },
+    closeSheet(el, app) { libSheetOpen = false; app.refresh(); },
+    async promptForMedia(el, app) {
+      const { prompts } = await app.call('prompts');
+      const d = await dialog({
+        title: 'Pick a prompt', submit: 'Draft the post',
+        body: field('Prompt', 'prompt_id', { value: prompts[0]?.id, options: prompts.map((p) => [p.id, `${p.pillar} · ${p.label}`]) }),
+      });
+      if (!d) return;
+      const r = await app.call('draftFromPrompt', { media_id: el.dataset.id, prompt_id: d.prompt_id });
+      toast('Draft ready. Review it, then approve.');
+      libSheetOpen = false;
+      app.go('s-composer', r.id);
+    },
     async autofill(el, app) { const r = await app.call('autofill', {}); toast(`Drafted ${plural(r.created, 'post')}${r.open ? `; ${r.open} still open` : ''}`); app.refresh(); },
     async exclude(el, app) { await app.call('excludeMedia', { id: el.dataset.id }); toast("The agent won't use it"); app.refresh(); },
     async consent(el, app) { await consentDialog(app, el.dataset.id); },
@@ -289,12 +310,12 @@ const composer = {
         <h1 class="h1-sm">${p.title}</h1>
         <span class="muted">Picked by the agent from your library · ${p.pillar} pillar${p.sample ? ' · sample' : ''}</span>
       </div>
-      <div class="row gap-s wrap">
+      <div class="row gap-s wrap head-tools">
         <button type="button" class="btn" data-action="showPillarIdeas" data-pillar="${p.pillar}">${icon('sparkle', 16)} Pillar Ideas</button>
         ${!live ? html`<button type="button" class="btn" data-action="swapMedia" data-id="${p.id}">Swap media</button>` : ''}
         ${live ? chip(`Posted ${fdate(p.published_at, { time: true })}${p.simulated ? ' (demo)' : ''}`, 'good')
           : scheduled ? chip(`Scheduled · ${fdate(p.scheduled_at, { time: true })}`, 'good')
-            : html`<button type="button" class="btn btn-primary" data-action="approvePost" data-id="${p.id}"${blocking ? ' disabled' : ''}>Approve and schedule</button>`}
+            : html`<button type="button" class="btn btn-primary only-wide" data-action="approvePost" data-id="${p.id}"${blocking ? ' disabled' : ''}>Approve and schedule</button>`}
       </div>
     </header>
     <div class="composer">
@@ -319,6 +340,10 @@ const composer = {
         <div class="field"><label for="alt">Alt text</label><input id="alt" value="${p.alt_text}"${live ? ' readonly' : ''}></div>
         <div class="row between wrap gap-s">${sourcesRow(d.citations)}${!live ? html`<button type="button" class="btn btn-primary btn-sm" data-action="savePost" data-id="${p.id}">Save and re-check</button>` : ''}</div>
       </section>
+      ${!live && !scheduled ? html`<div class="composer-bar only-narrow" role="region" aria-label="Approve this post">
+        <span class="bar-status ${blocking ? 'warn' : 'good'}">${icon(blocking ? 'alert' : 'check', 16)} ${blocking ? `${plural(blocking, 'thing')} to fix` : 'All checks pass'}</span>
+        <button type="button" class="btn btn-primary" data-action="approvePost" data-id="${p.id}"${blocking ? ' disabled' : ''}>Approve and schedule</button>
+      </div>` : ''}
       <aside class="card reviewer" aria-labelledby="rev-h">
         <div class="stack-xs"><h2 class="section-title" id="rev-h">Reviewer</h2><span class="muted small">Checked before anything posts</span></div>
         ${checksList(d.results)}
@@ -394,14 +419,15 @@ const calendar = {
     for (let day = 1; day <= days; day++) {
       const s = bySlot.get(day);
       const posts = [...(s?.posts || []), ...(offPlan.get(day) || [])];
-      cells.push(html`<div class="cal-cell ${s ? 'slot' : ''} ${s?.past ? 'past' : ''}">
-        <span class="cal-day">${day}</span>
+      const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][(lead + day - 1) % 7];
+      cells.push(html`<div class="cal-cell ${s ? 'slot' : ''} ${s?.past ? 'past' : ''} ${!s && !posts.length ? 'idle' : ''}">
+        <span class="cal-day">${day}<span class="cal-dow"> ${dow}</span></span>
         ${posts.map((p) => html`<button type="button" class="cal-chip ${p.pillar ? 'p-' + p.pillar.toLowerCase() : ''}" data-action="go" data-route="s-composer" data-id="${p.id}">
           <span class="cal-time">${(() => { const c = ct(p.scheduled_at); return time12(c.h, c.min).replace(':00', ''); })()} · ${p.platforms.length === 2 ? 'IG + FB' : p.platforms[0] === 'instagram' ? 'IG' : 'FB'}</span>
           <span>${p.title}</span>
           ${p.status === 'published' ? html`<span class="cal-state">${icon('check', 12)} Posted</span>` : p.status === 'scheduled' ? html`<span class="cal-state">${icon('check', 12)} Scheduled</span>` : html`<span class="cal-state">${icon('alert', 12)} ${p.blocking ? 'Fix' : 'Needs OK'}</span>`}
         </button>`)}
-        ${s && !posts.length && !s.past ? html`<button type="button" class="cal-open" data-action="fillSlot" data-slot="${s.key}">Open slot · needs media</button>` : ''}
+        ${s && !posts.length && !s.past ? html`<button type="button" class="cal-open" data-action="fillSlot" data-slot="${s.key}">Open · add media</button>` : ''}
       </div>`);
     }
     return html`
