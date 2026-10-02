@@ -106,7 +106,10 @@ test('social: people in frame block posting until a release is recorded', async 
 
 test('copy month keeps the nth-weekday rhythm and skips time-sensitive posts', async () => {
   const { store, leila } = await fresh();
-  const key = planningMonth();
+  // The sample Corps post is seeded into next month, so copy from the month that holds it.
+  const corps = store.all('posts', (x) => /founding/i.test(x.title || ''))[0];
+  const c = central(new Date(corps.scheduled_at));
+  const key = `${c.year}-${String(c.month).padStart(2, '0')}`;
   const plan = copyMonthPlan({ store, actor: leila }, { source_month: key, match_by: 'weekday', media_mode: 'same', skip_time_sensitive: true });
   const p = plan.plans[0];
   assert.ok(p.skipped.some((t) => /founding/i.test(t)), 'the Corps post is time-sensitive');

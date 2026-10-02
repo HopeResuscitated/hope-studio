@@ -922,3 +922,6 @@ body.loading .page { cursor: progress; }
 @media (max-width: 720px) {
   .home-areas { grid-template-columns: 1fr; }
 }
+.adv > summary { cursor: pointer; padding: 14px 18px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); font-weight: 600; color: var(--heading); }
+.adv[open] > summary { margin-bottom: 16px; }
+.quick-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 24px; }

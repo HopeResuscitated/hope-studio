@@ -138,6 +138,14 @@ const settings = {
         <p class="muted small">There is no auto-approve setting. Every send, post and export waits for a person.</p>
         <button type="submit" class="btn btn-primary btn-sm"${ro}>Save</button>
       </form>
+      ${connectionsSection(d, app)}
+      <section class="card stack-s" aria-labelledby="users-h">
+        <h2 class="section-title" id="users-h">People</h2>
+        <ul class="plain">${d.users.map((u) => html`<li><strong>${u.name}</strong> · ${u.role === 'admin' ? 'Admin and approver' : 'Approver'} · <code>${u.username}</code></li>`)}</ul>
+        <p class="muted small">${d.mode === 'demo' ? 'Switch who you are with the menu at the top.' : 'Reset a password on the server: node server/set-password.js leila'}</p>
+      </section>
+      <details class="adv span-2"><summary>Advanced: posting plan, banned terms, display, AI engine, backup</summary>
+      <div class="settings-grid">
       <form class="card stack-s" data-submit="savePlan">
         <h2 class="section-title">Posting plan</h2>
         <p class="muted small">Central time. The planner fills these slots every morning at 5:00 AM.</p>
@@ -172,12 +180,6 @@ const settings = {
           <span>AI Engine is active. Local Ollama models and offline templates are ready for zero-cost autonomous drafting.</span>
         </div>
       </section>
-      ${connectionsSection(d, app)}
-      <section class="card stack-s" aria-labelledby="users-h">
-        <h2 class="section-title" id="users-h">People</h2>
-        <ul class="plain">${d.users.map((u) => html`<li><strong>${u.name}</strong> · ${u.role === 'admin' ? 'Admin and approver' : 'Approver'} · <code>${u.username}</code></li>`)}</ul>
-        <p class="muted small">${d.mode === 'demo' ? 'Switch who you are with the menu at the top.' : 'Reset a password on the server: node server/set-password.js leila'}</p>
-      </section>
       <section class="card stack-s" aria-labelledby="data-h">
         <h2 class="section-title" id="data-h">Data Backup & Restore</h2>
         ${d.samples ? html`<p class="small">Sample grants, prospects, partners and posts from the design canvases are loaded so every screen has something to show. Clear them before going live; your knowledge base and facts stay.</p><button type="button" class="btn btn-sm" data-action="clearSamples"${ro}>Clear sample data</button>` : html`<p class="small">No sample data loaded.</p>`}
@@ -187,6 +189,7 @@ const settings = {
         </div>
         <p class="muted small">${plural(d.suppressions.length, 'address', 'addresses')} on the opt-out list.</p>
       </section>
+      </div></details>
     </div>`;
   },
   changes: connectionChanges,

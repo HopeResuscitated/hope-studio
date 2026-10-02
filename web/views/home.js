@@ -49,6 +49,13 @@ const home = {
       </a>`)}
     </section>
 
+    <div class="quick-actions" role="group" aria-label="Quick actions">
+      <a class="btn" href="#s-composer">${icon('plus', 16)} New post</a>
+      <a class="btn" href="#o-contacts">${icon('plus', 16)} Add contact</a>
+      <a class="btn" href="#g-scout">${icon('search', 16)} Find grants</a>
+      <a class="btn" href="#g-kb">${icon('doc', 16)} Knowledge base</a>
+    </div>
+
     <div class="cols">
       <section class="col-main" aria-labelledby="needs-h">
         <div class="row between"><h2 class="section-title" id="needs-h">Needs your OK ${needs.length ? html`<span class="count">${needs.length}</span>` : ''}</h2>${needs.length > 6 ? html`<a class="link-btn" href="#inbox">See all</a>` : ''}</div>
