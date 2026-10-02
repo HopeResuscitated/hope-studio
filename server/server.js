@@ -42,6 +42,7 @@ const seeded = store.load();
 const secrets = createSecrets(DATA_DIR);
 const buildIntegrations = () => createIntegrations({ dataDir: DATA_DIR, settings: () => store.settings(), cfg: secrets.cfg });
 const integrations = buildIntegrations();
+if (store.settings().outbound_email_enabled === undefined) store.setSettings({ outbound_email_enabled: false });
 if (!seeded) {
   seedCore(store);
   store.setMeta({ seeded: true, seeded_at: new Date().toISOString(), samples: false });
