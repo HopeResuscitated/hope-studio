@@ -6,13 +6,14 @@ import grants from './views/grants.js';
 import outreach from './views/outreach.js';
 import social from './views/social.js';
 import shared from './views/shared.js';
+import home from './views/home.js';
 
-const SCREENS = { ...grants, ...outreach, ...social, ...shared };
+const SCREENS = { ...home, ...grants, ...outreach, ...social, ...shared };
 
 const STUDIOS = [
-  { key: 'grant', label: 'Grants', sub: 'Grant Studio', home: 'g-week', nav: [['g-week', 'This week'], ['g-scout', 'Scout · grant finds'], ['g-writer', 'Drafts'], ['g-kb', 'Knowledge base']] },
-  { key: 'outreach', label: 'Outreach', sub: 'Outreach Studio', home: 'o-week', nav: [['o-week', 'This week'], ['o-contacts', 'Contacts & CRM'], ['o-scout', 'Prospect Scout'], ['o-writer', 'Outreach drafts'], ['o-board', 'Execution board'], ['o-kb', 'Knowledge base']] },
-  { key: 'social', label: 'Social', sub: 'Social Studio · IG + FB', home: 's-week', nav: [['s-week', 'This week'], ['s-library', 'Media library'], ['s-calendar', 'Calendar'], ['s-composer', 'Post composer']] },
+  { key: 'grant', label: 'Grants', sub: 'Grant Studio', home: 'g-week', nav: [['g-week', 'This week'], ['g-scout', 'Find grants'], ['g-writer', 'Drafts'], ['g-kb', 'Knowledge base']] },
+  { key: 'outreach', label: 'Outreach', sub: 'Outreach Studio', home: 'o-week', nav: [['o-week', 'This week'], ['o-contacts', 'Contacts'], ['o-scout', 'Prospects'], ['o-writer', 'Drafts'], ['o-board', 'Partnerships'], ['o-kb', 'Knowledge base']] },
+  { key: 'social', label: 'Social', sub: 'Social Studio · IG + FB', home: 's-week', nav: [['s-week', 'This week'], ['s-library', 'Library'], ['s-calendar', 'Calendar'], ['s-composer', 'Composer']] },
 ];
 const studioOf = (route) => STUDIOS.find((s) => route.startsWith(s.key[0] + '-')) || null;
 
@@ -39,7 +40,7 @@ applyTheme();
 const app = {
   api: null,
   me: null,
-  route: 'g-week',
+  route: 'home',
   get mode() { return this.api?.mode; },
   async call(method, params) { return this.api.call(method, params); },
   upload(file) { return this.api.upload(file); },
@@ -62,40 +63,30 @@ const $ = (s) => document.querySelector(s);
 let renderSeq = 0;
 
 function sidebar() {
-  const studio = studioOf(app.route) || STUDIOS.find((s) => s.key === store.get('studio', 'grant')) || STUDIOS[0];
+  const studio = studioOf(app.route);
   const c = app.me.counts;
   const badge = (n) => (n ? html`<span class="badge" aria-label="${n} waiting">${n}</span>` : '');
-  const theme = store.get('theme', 'system');
+  const top = (href, label, ic, on, n, alert) => html`<a href="#${href}" class="${on ? 'active' : ''}"${on ? ' aria-current="page"' : ''}>${icon(ic, 18)} ${label} ${n ? html`<span class="badge${alert ? ' badge-alert' : ''}">${n}</span>` : ''}</a>`;
+  const area = (s, ic) => html`<div class="side-area">${top(s.home, s.label, ic, studio?.key === s.key && !s.nav.some(([r]) => r === app.route && r !== s.home), c[s.key])}
+    ${studio?.key === s.key ? html`<div class="side-sub-nav">${s.nav.filter(([r]) => r !== s.home).map(([r, l]) => html`<a href="#${r}" class="${app.route === r || (r === 's-calendar' && app.route === 's-copy') ? 'active' : ''}"${app.route === r ? ' aria-current="page"' : ''}>${l}</a>`)}</div>` : ''}</div>`;
   return html`
     <div class="side-brand">
       ${logo(40)}
       <div class="wordmark"><span class="wm-top">HOPE</span><span class="wm-bottom">RESUSCITATED</span></div>
     </div>
     <button type="button" class="side-search-btn" data-action="openSearch" aria-label="Search everything">
-      ${icon('search', 16)} <span>Quick Search</span> <kbd>Ctrl+K</kbd>
+      ${icon('search', 16)} <span>Search</span> <kbd>Ctrl+K</kbd>
     </button>
-    <div class="studio-switch" role="group" aria-label="Studio">
-      ${STUDIOS.map((s) => html`<button type="button" aria-pressed="${s.key === studio.key}" data-action="studio" data-key="${s.key}">${s.label}${badge(c[s.key])}</button>`)}
-    </div>
-    <span class="side-sub">${studio.sub}</span>
-    <nav class="side-nav" aria-label="${studio.sub}">
-      ${studio.nav.map(([r, l]) => html`<a href="#${r}" class="${app.route === r || (r === 's-calendar' && app.route === 's-copy') ? 'active' : ''}"${app.route === r ? ' aria-current="page"' : ''}>${l}</a>`)}
+    <nav class="side-nav" aria-label="Hope Studio">
+      ${top('home', 'Home', 'pulse', app.route === 'home')}
+      ${top('inbox', 'Approvals', 'inbox', app.route === 'inbox', c.inbox)}
+      ${area(STUDIOS[0], 'doc')}${area(STUDIOS[1], 'mail')}${area(STUDIOS[2], 'photo')}
     </nav>
-    <nav class="side-nav side-shared" aria-label="Shared">
-      <a href="#inbox" class="${app.route === 'inbox' ? 'active' : ''}">${icon('inbox', 18)} Approvals inbox ${badge(c.inbox)}</a>
-      <a href="#activity" class="${app.route === 'activity' ? 'active' : ''}">${icon('pulse', 18)} Activity ${c.alerts ? html`<span class="badge badge-alert">${c.alerts}</span>` : ''}</a>
-      <a href="#settings" class="${app.route === 'settings' ? 'active' : ''}">${icon('gear', 18)} Settings</a>
+    <nav class="side-nav side-shared" aria-label="More">
+      ${top('activity', 'Activity', 'calendar', app.route === 'activity', c.alerts, true)}
+      ${top('settings', 'Settings', 'gear', app.route === 'settings')}
     </nav>
     <div class="side-foot">
-      <div class="side-tools">
-        <button type="button" class="icon-btn-text" data-action="toggleTheme" title="Toggle theme: Light / Dark / System">
-          ${icon(theme === 'dark' ? 'moon' : 'sun', 16)} <span>${theme === 'dark' ? 'Dark' : theme === 'light' ? 'Light' : 'Auto'}</span>
-        </button>
-        <button type="button" class="icon-btn-text" data-action="openShortcuts" title="Keyboard shortcuts (?)">
-          ${icon('help', 16)} <span>Help</span>
-        </button>
-      </div>
-      <span class="motto">NO STIGMA. NO BARRIERS. <span>JUST HOPE.</span></span>
       <div class="side-user"><span>${app.me.user.name}<small>${app.me.user.role === 'admin' ? 'Admin · approver' : 'Approver'}</small></span>
       ${app.mode === 'live' ? html`<button type="button" class="icon-btn" data-action="logout" aria-label="Sign out">${icon('logout')}</button>` : ''}</div>
     </div>`;
@@ -115,7 +106,8 @@ function tabbar() {
   const st = studioOf(app.route);
   const c = app.me.counts;
   const tab = (href, label, ic, on, n) => html`<a href="#${href}" class="${on ? 'on' : ''}"${on ? ' aria-current="page"' : ''}>${icon(ic, 20)}<span>${label}</span>${n ? html`<b class="tab-badge">${n}</b>` : ''}</a>`;
-  return html`${tab('inbox', 'Inbox', 'inbox', app.route === 'inbox', c.inbox)}
+  return html`${tab('home', 'Home', 'pulse', app.route === 'home')}
+    ${tab('inbox', 'Approvals', 'inbox', app.route === 'inbox', c.inbox)}
     ${tab('g-week', 'Grants', 'doc', st?.key === 'grant', c.grant)}
     ${tab('o-week', 'Outreach', 'mail', st?.key === 'outreach', c.outreach)}
     ${tab('s-week', 'Social', 'photo', st?.key === 'social', c.social)}
@@ -124,8 +116,8 @@ function tabbar() {
 
 async function render({ scrollTop = false } = {}) {
   const seq = ++renderSeq;
-  const route = (location.hash.slice(1) || store.get('lastRoute', 'g-week')).split('~')[0];
-  const screen = SCREENS[route] ? route : 'g-week';
+  const route = (location.hash.slice(1) || store.get('lastRoute', 'home')).split('~')[0];
+  const screen = SCREENS[route] ? route : 'home';
   const changed = screen !== app.route;
   app.route = screen;
   store.set('lastRoute', screen);

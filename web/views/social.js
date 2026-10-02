@@ -68,17 +68,13 @@ const week = {
     return html`
     <header class="page-head">
       <div class="head-text">
-        <span class="eyebrow">${new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Chicago' })} check-in · ${d.month} plan</span>
-        <h1>${onTrack ? "You're on track." : d.stats.needsOk ? `${plural(d.stats.needsOk, 'post needs', 'posts need')} your OK.` : 'A few slots need media.'}<br><span class="h1-strong">${d.stats.scheduled} of ${d.stats.total} ${d.month} posts are scheduled.</span></h1>
+        <span class="eyebrow">Social · ${d.month}</span>
+        <h1>${d.stats.needsOk ? `${plural(d.stats.needsOk, 'post needs', 'posts need')} your OK.` : onTrack ? "You're on track." : 'A few slots need media.'}</h1>
       </div>
       <button type="button" class="btn btn-primary" data-action="go" data-route="s-library">${icon('upload', 16)} Upload photos &amp; videos</button>
     </header>
-    <section class="tiles" aria-label="Progress">
-      <div class="tile"><span class="tile-label">${d.month} posts scheduled</span><span class="tile-value">${d.stats.scheduled} / ${d.stats.total}</span><div class="bar" role="img" aria-label="${pct}% scheduled"><span style="width:${pct}%"></span></div></div>
-      <div class="tile"><span class="tile-label">Weeks on plan, in a row</span><span class="tile-value">${d.stats.weeks}</span></div>
-      <div class="tile"><span class="tile-label">Unused media in library</span><span class="tile-value">${d.stats.unused}</span></div>
-      <div class="tile tile-hi"><span class="tile-label">Needs your OK</span><span class="tile-value">${d.stats.needsOk}</span></div>
-    </section>
+    <p class="statline" aria-label="Progress"><span><b>${d.stats.scheduled} of ${d.stats.total}</b> ${d.month} posts scheduled</span><span><b>${d.stats.weeks}</b> weeks on plan in a row</span><span><b>${d.stats.unused}</b> unused in library</span></p>
+    <div class="bar bar-wide" role="img" aria-label="${pct}% scheduled"><span style="width:${pct}%"></span></div>
     <div class="cols">
       <section class="col-main" aria-labelledby="n7-h">
         <h2 class="section-title" id="n7-h">Next 7 days</h2>
@@ -127,16 +123,27 @@ const week = {
 // ---------------------------------------------------------------------------
 
 const library = {
-  title: 'Social · Media library',
-  load: (app) => app.call('library', { filter: app.pref('mediaFilter', 'all') }),
+  title: 'Social · Library',
+  async load(app) {
+    const d = await app.call('library', { filter: app.pref('mediaFilter', 'all') });
+    d.prompts = (await app.call('prompts')).prompts;
+    return d;
+  },
   render(d, app) {
     const f = app.pref('mediaFilter', 'all');
+    const tab = app.pref('libTab', 'media');
     const sel = d.media.find((m) => m.id === app.sel('s-library')) || d.media[0];
     return html`
     <header class="page-head">
-      <div class="head-text"><span class="eyebrow">Media library · ${plural(d.total, 'item')}</span><h1>Load it in. The agent picks and schedules.</h1></div>
-      <button type="button" class="btn btn-primary" data-action="autofill"${d.open ? '' : ' disabled'}>Auto-schedule ${d.open ? plural(d.open, 'open slot') : 'open slots'}</button>
+      <div class="head-text"><span class="eyebrow">${plural(d.total, 'photo or video', 'photos and videos')} · ${plural(d.prompts.length, 'prompt')}</span><h1>Library</h1></div>
+      ${tab === 'media' ? html`<button type="button" class="btn btn-primary" data-action="autofill"${d.open ? '' : ' disabled'}>Auto-schedule ${d.open ? plural(d.open, 'open slot') : 'open slots'}</button>`
+    : html`<button type="button" class="btn btn-primary" data-action="editPrompt">${icon('plus', 16)} New prompt</button>`}
     </header>
+    <div class="filters" role="group" aria-label="Library section">
+      <button type="button" aria-pressed="${tab === 'media'}" data-action="setPref" data-key="libTab" data-value="media">Photos &amp; videos</button>
+      <button type="button" aria-pressed="${tab === 'prompts'}" data-action="setPref" data-key="libTab" data-value="prompts">Prompts <span class="count">${d.prompts.length}</span></button>
+    </div>
+    ${tab === 'prompts' ? promptsPanel(d, sel) : html`
     <label class="dropzone" data-drop="upload">
       <span class="dz-icon">${icon('upload', 28)}</span>
       <span class="grow stack-xs"><strong>Drop photos and videos here</strong><span class="muted small">JPG, PNG, HEIC, MP4 or MOV. The agent tags each one by content pillar and flags anything with people in frame.</span></span>
@@ -171,9 +178,40 @@ const library = {
         ${sel.needsConsent ? html`<div class="fixbox"><p class="small">${sel.people_note || 'Confirm there are no people, or that you hold a signed release.'}</p><div class="row gap-s wrap"><button type="button" class="btn btn-primary btn-sm" data-action="consent" data-id="${sel.id}">I have permission</button><button type="button" class="btn btn-sm" data-action="noPeople" data-id="${sel.id}">No people in it</button></div></div>` : ''}
         <div class="row gap-s wrap">${sel.uses.length ? html`<button type="button" class="btn btn-primary" data-action="go" data-route="s-composer" data-id="${sel.uses[0].id}">Edit post</button>` : ''}<button type="button" class="btn" data-action="exclude" data-id="${sel.id}">Don't use</button></div>
       </aside>` : ''}
-    </div>`;
+    </div>`}`;
   },
   actions: {
+    async usePrompt(el, app) {
+      const media = (await app.call('library', { filter: 'all' })).media;
+      if (!media.length) return toast('Add a photo or video first.', 'bad');
+      const cur = app.sel('s-library');
+      const d = await dialog({
+        title: 'Use this prompt', submit: 'Draft the post',
+        body: html`<p class="muted small">${el.dataset.text}</p>${field('Photo or video', 'media_id', { value: media.some((m) => m.id === cur) ? cur : media[0].id, options: media.map((m) => [m.id, `${m.kind === 'video' ? 'Video' : 'Photo'} · ${m.label}`]) })}`,
+      });
+      if (!d) return;
+      const r = await app.call('draftFromPrompt', { media_id: d.media_id, prompt_id: el.dataset.id });
+      toast('Draft ready. Review it, then approve.');
+      app.go('s-composer', r.id);
+    },
+    async editPrompt(el, app) {
+      const cur = el.dataset.id ? (await app.call('prompts')).prompts.find((p) => p.id === el.dataset.id) : null;
+      const d = await dialog({
+        title: cur ? 'Edit prompt' : 'New prompt', submit: 'Save',
+        body: html`${field('Name', 'label', { value: cur?.label || '', required: true, autofocus: true })}${field('What the post should say', 'text', { value: cur?.text || '', rows: 4, required: true, hint: 'The writer uses this with your knowledge base and the photo.' })}${field('Pillar', 'pillar', { value: cur?.pillar || 'Educate', options: PILLARS.map((p) => [p, p]) })}`,
+      });
+      if (!d) return;
+      await app.call('savePrompt', { id: cur?.id, label: d.label, text: d.text, pillar: d.pillar });
+      toast('Prompt saved');
+      app.refresh();
+    },
+    async deletePrompt(el, app) {
+      const ok = await dialog({ title: 'Delete this prompt?', submit: 'Delete', body: html`<p>It won't affect posts already drafted.</p>` });
+      if (!ok) return;
+      await app.call('deletePrompt', { id: el.dataset.id });
+      toast('Prompt deleted');
+      app.refresh();
+    },
     selectMedia(el, app) { app.setSel('s-library', el.dataset.id); app.refresh(); },
     async autofill(el, app) { const r = await app.call('autofill', {}); toast(`Drafted ${plural(r.created, 'post')}${r.open ? `; ${r.open} still open` : ''}`); app.refresh(); },
     async exclude(el, app) { await app.call('excludeMedia', { id: el.dataset.id }); toast("The agent won't use it"); app.refresh(); },
@@ -186,6 +224,18 @@ const library = {
   },
   drops: { upload: (files, app) => uploadFiles(files, app) },
 };
+
+function promptsPanel(d) {
+  return html`<p class="muted small">Pick a prompt, pair it with a photo or video, and the writer drafts the post. It waits for your OK like everything else.</p>
+  <div class="prompt-grid">${d.prompts.map((p) => html`<article class="card prompt-card">
+    <div class="row between">${pillarChip(p.pillar)}<span class="row gap-xs">
+      <button type="button" class="link-btn" data-action="editPrompt" data-id="${p.id}">Edit</button>
+      <button type="button" class="link-btn" data-action="deletePrompt" data-id="${p.id}">Delete</button></span></div>
+    <h2 class="section-title">${p.label}</h2>
+    <p class="muted small">${p.text}</p>
+    <button type="button" class="btn btn-sm btn-primary" data-action="usePrompt" data-id="${p.id}" data-text="${p.text}">Use with a photo or video</button>
+  </article>`)}</div>`;
+}
 
 async function uploadFiles(files, app) {
   const list = files.filter((f) => /^(image|video)\//.test(f.type) || /\.(heic|mov|mp4)$/i.test(f.name));

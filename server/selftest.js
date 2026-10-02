@@ -12,6 +12,7 @@ import { parseRfp } from '../web/core/writer.js';
 import { parseInstrumentlAlert, parseCandidCsv } from '../web/core/agents/grant.js';
 import { copyMonthPlan, planningMonth } from '../web/core/agents/social.js';
 import { central } from '../web/core/util.js';
+import { approvalFor } from '../web/core/approvals.js';
 
 async function fresh() {
   const store = createStore({});
@@ -106,7 +107,10 @@ test('social: people in frame block posting until a release is recorded', async 
 
 test('copy month keeps the nth-weekday rhythm and skips time-sensitive posts', async () => {
   const { store, leila } = await fresh();
-  const key = planningMonth();
+  // The sample Corps post is seeded into next month, so copy from the month that holds it.
+  const corps = store.all('posts', (x) => /founding/i.test(x.title || ''))[0];
+  const c = central(new Date(corps.scheduled_at));
+  const key = `${c.year}-${String(c.month).padStart(2, '0')}`;
   const plan = copyMonthPlan({ store, actor: leila }, { source_month: key, match_by: 'weekday', media_mode: 'same', skip_time_sensitive: true });
   const p = plan.plans[0];
   assert.ok(p.skipped.some((t) => /founding/i.test(t)), 'the Corps post is time-sensitive');
@@ -250,4 +254,18 @@ test('crm contact directory and daily gmail synchronization', async () => {
   // 5. Run daily Gmail synchronization
   const syncRes = await svc.call('syncGmailContacts', {}, leila);
   assert.ok(syncRes.total_contacts >= 5);
+});
+
+test('a post drafted from a prompt waits for a person and cannot be published', async () => {
+  const { store, svc, leila } = await fresh();
+  const { prompts } = await svc.call('prompts', {}, leila);
+  assert.ok(prompts.length >= 5, 'starter prompts are added once');
+  assert.equal((await svc.call('prompts', {}, leila)).prompts.length, prompts.length, 'and not added twice');
+  const media = store.all('media_assets')[0];
+  const { id } = await svc.call('draftFromPrompt', { media_id: media.id, prompt_id: prompts[0].id }, leila);
+  const post = store.get('posts', id);
+  assert.equal(post.topic, prompts[0].text);
+  assert.notEqual(post.status, 'published');
+  assert.notEqual(approvalFor(store, 'post', id).state, 'executed');
+  await assert.rejects(svc.call('draftFromPrompt', { media_id: 'nope', prompt_id: prompts[0].id }, leila), /Pick a photo/);
 });

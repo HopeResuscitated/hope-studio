@@ -40,18 +40,12 @@ const week = {
     return html`
     <header class="page-head">
       <div class="head-text">
-        <span class="eyebrow">${new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Chicago' })} review</span>
-        <h1>${n ? `${n === 1 ? 'One draft is' : `${['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'][n] || n} drafts are`} waiting for you, ${d.first}.` : `Nothing is waiting on you, ${d.first}.`}</h1>
-        <p class="lede">${d.lastRun ? lastRunLine(d.lastRun) : 'The agents run Mondays at 6:00 AM. Scout searches Grants.gov, Candid and Instrumentl, Writer drafts from your knowledge base, and Reviewer checks each draft against its funder\'s rubric.'}</p>
+        <span class="eyebrow">Grants</span>
+        <h1>${n ? `${plural(n, 'draft is', 'drafts are')} waiting for you.` : 'Nothing is waiting on you.'}</h1>
       </div>
       <button type="button" class="btn btn-primary" data-action="runAgents" data-agent="grant">Run agents now</button>
     </header>
-    <section class="tiles" aria-label="Pipeline">
-      <div class="tile"><span class="tile-label">Found by Scout this month</span><span class="tile-value">${d.stats.found}</span></div>
-      <div class="tile"><span class="tile-label">Eligible matches</span><span class="tile-value">${d.stats.eligible}</span></div>
-      <div class="tile tile-hi"><span class="tile-label">Drafted, ready for you</span><span class="tile-value">${d.stats.ready}</span></div>
-      <div class="tile"><span class="tile-label">Submitted this month</span><span class="tile-value">${d.stats.submitted}</span></div>
-    </section>
+    <p class="statline" aria-label="Pipeline"><span><b>${d.stats.found}</b> found this month</span><span><b>${d.stats.eligible}</b> eligible</span><span><b>${d.stats.submitted}</b> submitted</span></p>
     ${d.deadlines.map((g) => html`<div class="banner">${icon('alert')}<span><strong>${g.title}</strong> (${g.funder}) is due in ${plural(g.days, 'day')}.</span></div>`)}
     <div class="cols">
       <section class="col-main" aria-labelledby="drafts-h">
@@ -92,8 +86,7 @@ const scout = {
     <header class="page-head">
       <div class="head-text">
         <span class="eyebrow">Scout agent</span>
-        <h1>New funding that fits your mission</h1>
-        <p class="lede">${lastRunLine(d.lastRun, 'Scout runs Mondays at 6:00 AM.')} Each find is checked against your eligibility profile before it reaches you.</p>
+        <h1>Grant finds</h1>
       </div>
       <div class="row gap-s wrap">
         <button type="button" class="btn" data-action="addGrantMenu">${icon('plus', 16)} Add grants</button>

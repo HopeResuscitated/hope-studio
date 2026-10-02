@@ -27,19 +27,13 @@ const week = {
     return html`
     <header class="page-head">
       <div class="head-text">
-        <span class="eyebrow">${new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Chicago' })} outreach review · 2026–27 pilot</span>
-        <h1>${plural(d.stats.ready, 'message is', 'messages are').replace(/^1 message is/, '1 message is')} ready to send.<br><span class="h1-strong">${plural(d.stats.calls, 'intro call is', 'intro calls are')} booked.</span></h1>
-        <p class="lede">Scout finds schools, groups and businesses in the Capital Region. Writer drafts outreach from the Partner Guide, and Reviewer checks every message against Our Commitments.</p>
+        <span class="eyebrow">Outreach</span>
+        <h1>${d.stats.ready ? `${plural(d.stats.ready, 'message is', 'messages are')} ready to send.` : 'Nothing is waiting to send.'}</h1>
       </div>
       <button type="button" class="btn btn-primary" data-action="runAgents" data-agent="outreach">Run agents now</button>
     </header>
     ${addressBanner(app)}
-    <section class="tiles" aria-label="Pipeline">
-      <div class="tile"><span class="tile-label">New prospects this month</span><span class="tile-value">${d.stats.prospects}</span></div>
-      <div class="tile tile-hi"><span class="tile-label">Ready for your OK</span><span class="tile-value">${d.stats.ready}</span></div>
-      <div class="tile"><span class="tile-label">Intro calls booked</span><span class="tile-value">${d.stats.calls}</span></div>
-      <div class="tile"><span class="tile-label">Naloxone access points live</span><span class="tile-value">${d.stats.accessPoints}</span></div>
-    </section>
+    <p class="statline" aria-label="Pipeline"><span><b>${d.stats.prospects}</b> new prospects this month</span><span><b>${d.stats.calls}</b> intro calls booked</span><span><b>${d.stats.accessPoints}</b> access points live</span></p>
     <div class="cols">
       <section class="col-main" aria-labelledby="ready-h">
         <h2 class="section-title" id="ready-h">Ready to send</h2>
@@ -76,8 +70,7 @@ const scout = {
     const t = d.targeting;
     return html`
     <header class="page-head">
-      <div class="head-text"><span class="eyebrow">Prospect Scout · ${t.region.replace(', Louisiana', '')}</span><h1>Who should hear from us next</h1>
-      <p class="lede">Each prospect is matched to an offering from the Partner Guide, with the reason it fits and a contact to reach.</p></div>
+      <div class="head-text"><span class="eyebrow">Prospect Scout · ${t.region.replace(', Louisiana', '')}</span><h1>Prospects</h1></div>
       <div class="row gap-s wrap">
         <button type="button" class="btn" data-action="importCsv">${icon('upload', 16)} Import CSV</button>
         <button type="button" class="btn" data-action="addProspect">${icon('plus', 16)} Add prospect</button>
@@ -292,7 +285,7 @@ const board = {
     const sel = all.find((c) => c.id === selId) || d.columns[4].cards[0] || all[0];
     return html`
     <header class="page-head">
-      <div class="head-text"><span class="eyebrow">Execution · How to partner, five steps</span><h1>Every partnership, from hello to impact</h1></div>
+      <div class="head-text"><span class="eyebrow">Execution · How to partner, five steps</span><h1>Partnerships</h1></div>
       <button type="button" class="btn btn-primary" data-action="addPartner">${icon('plus', 16)} Add partner</button>
     </header>
     <div class="board-wrap"><section class="board" aria-label="Partnership board">
@@ -414,9 +407,8 @@ const contacts = {
     return html`
     <header class="page-head">
       <div class="head-text">
-        <span class="eyebrow">Outreach Studio · Contacts & CRM</span>
-        <h1>Partner & Community Directory</h1>
-        <p class="lede">Daily Gmail sync automatically organizes community contacts, tracks first and last communication timelines, manages request statuses, and highlights follow-ups.</p>
+        <span class="eyebrow">Outreach</span>
+        <h1>Contacts</h1>
       </div>
       <div class="row gap-s wrap">
         <button type="button" class="btn" data-action="syncGmail">${icon('sparkle', 16)} Sync Gmail Now</button>
@@ -425,12 +417,7 @@ const contacts = {
       </div>
     </header>
 
-    <section class="tiles" aria-label="CRM Overview">
-      <div class="tile"><span class="tile-label">Total Directory Contacts</span><span class="tile-value">${d.counts.total}</span></div>
-      <div class="tile ${d.counts.needs_followup > 0 ? 'tile-hi' : ''}"><span class="tile-label">Needs Follow-Up / Overdue</span><span class="tile-value">${d.counts.needs_followup}</span></div>
-      <div class="tile"><span class="tile-label">Awaiting Partner Reply</span><span class="tile-value">${d.counts.awaiting_reply}</span></div>
-      <div class="tile"><span class="tile-label">Active Partners & Access Points</span><span class="tile-value">${d.counts.active_partners}</span></div>
-    </section>
+    <p class="statline" aria-label="CRM overview"><span><b>${d.counts.total}</b> contacts</span><span><b>${d.counts.needs_followup}</b> need follow-up</span><span><b>${d.counts.awaiting_reply}</b> awaiting reply</span><span><b>${d.counts.active_partners}</b> active partners</span></p>
 
     <div class="row gap-m wrap between center mb-s">
       <div class="filters" role="group" aria-label="Filter by segment">

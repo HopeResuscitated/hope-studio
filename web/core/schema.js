@@ -11,7 +11,7 @@ export const TABLES = [
   // Outreach
   'prospects', 'contacts', 'messages', 'partnerships',
   // Social
-  'media_assets', 'posts', 'month_copies',
+  'media_assets', 'posts', 'month_copies', 'prompts',
   // Support tables
   'suppressions', 'kb_gaps', 'alerts',
 ];
