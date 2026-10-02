@@ -310,8 +310,8 @@ const composer = {
       </section>
       <section class="card editor-card" aria-label="Caption">
         <div class="filters" role="tablist" aria-label="Platform">
-          <button type="button" role="tab" aria-selected="${tab === 'instagram'}" aria-pressed="${tab === 'instagram'}" data-action="setPref" data-key="platformTab" data-value="instagram">Instagram</button>
-          <button type="button" role="tab" aria-selected="${tab === 'facebook'}" aria-pressed="${tab === 'facebook'}" data-action="setPref" data-key="platformTab" data-value="facebook">Facebook</button>
+          <button type="button" role="tab" aria-selected="${tab === 'instagram'}" data-action="setPref" data-key="platformTab" data-value="instagram">Instagram</button>
+          <button type="button" role="tab" aria-selected="${tab === 'facebook'}" data-action="setPref" data-key="platformTab" data-value="facebook">Facebook</button>
         </div>
         <label class="sr-only" for="caption">${tab === 'instagram' ? 'Instagram' : 'Facebook'} caption</label>
         <textarea id="caption" class="editor caption" rows="13" data-field="${tab === 'instagram' ? 'caption_ig' : 'caption_fb'}" data-input="count" data-limit="${tab === 'instagram' ? 2200 : 63206}"${live ? ' readonly' : ''}>${tab === 'instagram' ? p.caption_ig : p.caption_fb}</textarea>
@@ -418,8 +418,8 @@ const calendar = {
       </div>
     </header>
     <div class="legend">${d.pillars.map((p) => pillarChip(p))}</div>
-    <div class="cal-wrap"><div class="cal" role="grid" aria-label="${d.label}">
-      ${['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((w) => html`<span class="cal-wd" role="columnheader">${w}</span>`)}
+    <div class="cal-wrap"><div class="cal" role="group" aria-label="${d.label}">
+      ${['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((w) => html`<span class="cal-wd" aria-hidden="true">${w}</span>`)}
       ${cells}
     </div></div>`;
   },

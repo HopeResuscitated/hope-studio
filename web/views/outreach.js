@@ -451,12 +451,12 @@ const contacts = {
           <input type="search" placeholder="Search by name, email, phone, company…" value="${d.search}" data-input="onSearch">
         </div>
 
-        <div class="crm-list" role="listbox">
+        <div class="crm-list" role="group" aria-label="Contacts">
           ${d.contacts.length ? d.contacts.map((c) => {
             const fu = formatFollowup(c.next_follow_up_date);
             const isSel = c.id === d.selId;
             return html`
-            <article class="crm-card ${isSel ? 'active' : ''}" role="option" aria-selected="${isSel}" data-action="selectContact" data-id="${c.id}">
+            <article class="crm-card ${isSel ? 'active' : ''}" tabindex="0" aria-current="${isSel ? 'true' : 'false'}" data-action="selectContact" data-id="${c.id}">
               <div class="crm-card-header">
                 <div class="stack-xs" style="min-width:0;">
                   <span class="crm-contact-name">${c.name || 'Unnamed Contact'}</span>
