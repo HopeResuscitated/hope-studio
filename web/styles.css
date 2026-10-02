@@ -925,3 +925,6 @@ body.loading .page { cursor: progress; }
 .adv > summary { cursor: pointer; padding: 14px 18px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); font-weight: 600; color: var(--heading); }
 .adv[open] > summary { margin-bottom: 16px; }
 .quick-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 24px; }
+.statline { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 20px; color: var(--muted); font-size: 15px; }
+.statline b { color: var(--heading); font: 600 20px var(--display); margin-right: 4px; }
+.bar-wide { margin: -8px 0 22px; max-width: 420px; }

@@ -68,17 +68,13 @@ const week = {
     return html`
     <header class="page-head">
       <div class="head-text">
-        <span class="eyebrow">${new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Chicago' })} check-in · ${d.month} plan</span>
-        <h1>${onTrack ? "You're on track." : d.stats.needsOk ? `${plural(d.stats.needsOk, 'post needs', 'posts need')} your OK.` : 'A few slots need media.'}<br><span class="h1-strong">${d.stats.scheduled} of ${d.stats.total} ${d.month} posts are scheduled.</span></h1>
+        <span class="eyebrow">Social · ${d.month}</span>
+        <h1>${d.stats.needsOk ? `${plural(d.stats.needsOk, 'post needs', 'posts need')} your OK.` : onTrack ? "You're on track." : 'A few slots need media.'}</h1>
       </div>
       <button type="button" class="btn btn-primary" data-action="go" data-route="s-library">${icon('upload', 16)} Upload photos &amp; videos</button>
     </header>
-    <section class="tiles" aria-label="Progress">
-      <div class="tile"><span class="tile-label">${d.month} posts scheduled</span><span class="tile-value">${d.stats.scheduled} / ${d.stats.total}</span><div class="bar" role="img" aria-label="${pct}% scheduled"><span style="width:${pct}%"></span></div></div>
-      <div class="tile"><span class="tile-label">Weeks on plan, in a row</span><span class="tile-value">${d.stats.weeks}</span></div>
-      <div class="tile"><span class="tile-label">Unused media in library</span><span class="tile-value">${d.stats.unused}</span></div>
-      <div class="tile tile-hi"><span class="tile-label">Needs your OK</span><span class="tile-value">${d.stats.needsOk}</span></div>
-    </section>
+    <p class="statline" aria-label="Progress"><span><b>${d.stats.scheduled} of ${d.stats.total}</b> ${d.month} posts scheduled</span><span><b>${d.stats.weeks}</b> weeks on plan in a row</span><span><b>${d.stats.unused}</b> unused in library</span></p>
+    <div class="bar bar-wide" role="img" aria-label="${pct}% scheduled"><span style="width:${pct}%"></span></div>
     <div class="cols">
       <section class="col-main" aria-labelledby="n7-h">
         <h2 class="section-title" id="n7-h">Next 7 days</h2>

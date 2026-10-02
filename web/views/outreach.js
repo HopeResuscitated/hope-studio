@@ -27,19 +27,13 @@ const week = {
     return html`
     <header class="page-head">
       <div class="head-text">
-        <span class="eyebrow">${new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Chicago' })} outreach review · 2026–27 pilot</span>
-        <h1>${plural(d.stats.ready, 'message is', 'messages are').replace(/^1 message is/, '1 message is')} ready to send.<br><span class="h1-strong">${plural(d.stats.calls, 'intro call is', 'intro calls are')} booked.</span></h1>
-        <p class="lede">Scout finds schools, groups and businesses in the Capital Region. Writer drafts outreach from the Partner Guide, and Reviewer checks every message against Our Commitments.</p>
+        <span class="eyebrow">Outreach</span>
+        <h1>${d.stats.ready ? `${plural(d.stats.ready, 'message is', 'messages are')} ready to send.` : 'Nothing is waiting to send.'}</h1>
       </div>
       <button type="button" class="btn btn-primary" data-action="runAgents" data-agent="outreach">Run agents now</button>
     </header>
     ${addressBanner(app)}
-    <section class="tiles" aria-label="Pipeline">
-      <div class="tile"><span class="tile-label">New prospects this month</span><span class="tile-value">${d.stats.prospects}</span></div>
-      <div class="tile tile-hi"><span class="tile-label">Ready for your OK</span><span class="tile-value">${d.stats.ready}</span></div>
-      <div class="tile"><span class="tile-label">Intro calls booked</span><span class="tile-value">${d.stats.calls}</span></div>
-      <div class="tile"><span class="tile-label">Naloxone access points live</span><span class="tile-value">${d.stats.accessPoints}</span></div>
-    </section>
+    <p class="statline" aria-label="Pipeline"><span><b>${d.stats.prospects}</b> new prospects this month</span><span><b>${d.stats.calls}</b> intro calls booked</span><span><b>${d.stats.accessPoints}</b> access points live</span></p>
     <div class="cols">
       <section class="col-main" aria-labelledby="ready-h">
         <h2 class="section-title" id="ready-h">Ready to send</h2>
