@@ -130,7 +130,7 @@ const library = {
     const sel = d.media.find((m) => m.id === app.sel('s-library')) || d.media[0];
     return html`
     <header class="page-head">
-      <div class="head-text"><span class="eyebrow">Media library · ${plural(d.total, 'item')}</span><h1>Load it in. The agent picks and schedules.</h1></div>
+      <div class="head-text"><span class="eyebrow">Media library · ${plural(d.total, 'item')}</span><h1>Media library</h1></div>
       <button type="button" class="btn btn-primary" data-action="autofill"${d.open ? '' : ' disabled'}>Auto-schedule ${d.open ? plural(d.open, 'open slot') : 'open slots'}</button>
     </header>
     <label class="dropzone" data-drop="upload">

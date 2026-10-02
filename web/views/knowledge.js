@@ -79,10 +79,10 @@ export function knowledgeScreen(collection, { eyebrow, lede, ask, askLabel }) {
       const isAdmin = app.me.user.role === 'admin';
       return html`
       <header class="page-head">
-        <div class="head-text"><span class="eyebrow">${eyebrow}</span><h1>Knowledge base</h1><p class="lede">${lede}</p></div>
+        <div class="head-text"><span class="eyebrow">${eyebrow}</span><h1>Knowledge base</h1></div>
         <label class="btn btn-primary file-btn">${icon('upload', 16)} Upload documents<input type="file" multiple accept=".txt,.md,.html,.htm,.csv,.docx,.pdf" data-change="uploadDocs"></label>
       </header>
-      <p class="muted small">${plural(d.counts.indexed, 'document')} indexed into ${plural(d.counts.chunks, 'chunk')} of about 800 tokens. Search is full-text (BM25), filtered to this studio plus shared Partner Guide material.</p>
+      <p class="muted small">${plural(d.counts.indexed, 'document')} indexed.</p>
       <div class="cols">
         <section class="col-main">
           <div class="doc-grid">

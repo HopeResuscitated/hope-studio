@@ -70,8 +70,7 @@ const scout = {
     const t = d.targeting;
     return html`
     <header class="page-head">
-      <div class="head-text"><span class="eyebrow">Prospect Scout · ${t.region.replace(', Louisiana', '')}</span><h1>Who should hear from us next</h1>
-      <p class="lede">Each prospect is matched to an offering from the Partner Guide, with the reason it fits and a contact to reach.</p></div>
+      <div class="head-text"><span class="eyebrow">Prospect Scout · ${t.region.replace(', Louisiana', '')}</span><h1>Prospects</h1></div>
       <div class="row gap-s wrap">
         <button type="button" class="btn" data-action="importCsv">${icon('upload', 16)} Import CSV</button>
         <button type="button" class="btn" data-action="addProspect">${icon('plus', 16)} Add prospect</button>
@@ -286,7 +285,7 @@ const board = {
     const sel = all.find((c) => c.id === selId) || d.columns[4].cards[0] || all[0];
     return html`
     <header class="page-head">
-      <div class="head-text"><span class="eyebrow">Execution · How to partner, five steps</span><h1>Every partnership, from hello to impact</h1></div>
+      <div class="head-text"><span class="eyebrow">Execution · How to partner, five steps</span><h1>Partnerships</h1></div>
       <button type="button" class="btn btn-primary" data-action="addPartner">${icon('plus', 16)} Add partner</button>
     </header>
     <div class="board-wrap"><section class="board" aria-label="Partnership board">
@@ -408,9 +407,8 @@ const contacts = {
     return html`
     <header class="page-head">
       <div class="head-text">
-        <span class="eyebrow">Outreach Studio · Contacts & CRM</span>
-        <h1>Partner & Community Directory</h1>
-        <p class="lede">Daily Gmail sync automatically organizes community contacts, tracks first and last communication timelines, manages request statuses, and highlights follow-ups.</p>
+        <span class="eyebrow">Outreach</span>
+        <h1>Contacts</h1>
       </div>
       <div class="row gap-s wrap">
         <button type="button" class="btn" data-action="syncGmail">${icon('sparkle', 16)} Sync Gmail Now</button>
@@ -419,12 +417,7 @@ const contacts = {
       </div>
     </header>
 
-    <section class="tiles" aria-label="CRM Overview">
-      <div class="tile"><span class="tile-label">Total Directory Contacts</span><span class="tile-value">${d.counts.total}</span></div>
-      <div class="tile ${d.counts.needs_followup > 0 ? 'tile-hi' : ''}"><span class="tile-label">Needs Follow-Up / Overdue</span><span class="tile-value">${d.counts.needs_followup}</span></div>
-      <div class="tile"><span class="tile-label">Awaiting Partner Reply</span><span class="tile-value">${d.counts.awaiting_reply}</span></div>
-      <div class="tile"><span class="tile-label">Active Partners & Access Points</span><span class="tile-value">${d.counts.active_partners}</span></div>
-    </section>
+    <p class="statline" aria-label="CRM overview"><span><b>${d.counts.total}</b> contacts</span><span><b>${d.counts.needs_followup}</b> need follow-up</span><span><b>${d.counts.awaiting_reply}</b> awaiting reply</span><span><b>${d.counts.active_partners}</b> active partners</span></p>
 
     <div class="row gap-m wrap between center mb-s">
       <div class="filters" role="group" aria-label="Filter by segment">

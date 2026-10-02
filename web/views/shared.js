@@ -22,8 +22,7 @@ const inbox = {
     const isApprover = ['admin', 'approver'].includes(app.me.user.role);
     return html`
     <header class="page-head">
-      <div class="head-text"><span class="eyebrow">Approvals inbox</span><h1>Nothing goes out without a person's OK.</h1>
-      <p class="lede">Every draft moves through drafted → in review → needs you → approved → done. The Executor refuses anything that isn't approved, and that rule lives in the data layer, not just this screen.</p></div>
+      <div class="head-text"><span class="eyebrow">Nothing goes out without a person's OK</span><h1>Approvals</h1></div>
     </header>
     <div class="filters" role="group" aria-label="Filter by agent">${AGENT_TAB.map(([k, l]) => html`<button type="button" aria-pressed="${tab === k}" data-action="setPref" data-key="inboxAgent" data-value="${k}">${l}${k !== 'all' ? html` <span class="count">${d.rows.filter((r) => r.agent === k && r.state === 'needs_you').length}</span>` : ''}</button>`)}</div>
     ${GROUPS.map(([state, label, note]) => {
@@ -77,8 +76,7 @@ const activity = {
     const t = app.pref('auditType', 'all');
     return html`
     <header class="page-head">
-      <div class="head-text"><span class="eyebrow">Activity</span><h1>Every run, approval, send and post</h1>
-      <p class="lede">The audit log records who did what and when, with before and after snapshots, so you have a record for funders and the board.</p></div>
+      <div class="head-text"><span class="eyebrow">Record for funders and the board</span><h1>Activity</h1></div>
       <a class="btn" href="${app.downloadUrl('api/audit.csv')}" data-action="${app.mode === 'demo' ? 'csvDemo' : ''}">${icon('doc', 16)} Export CSV</a>
     </header>
     ${d.alerts.length ? html`<section aria-labelledby="alerts-h"><h2 class="section-title" id="alerts-h">Alerts</h2>${d.alerts.map((a) => html`<div class="banner ${a.level === 'critical' ? 'banner-bad' : ''}">${icon('alert')}<span class="grow"><strong>${a.title}</strong>${a.detail ? ` ${a.detail}` : ''} <span class="muted small">${ago(a.created_at)}</span></span><button type="button" class="btn btn-sm" data-action="resolveAlert" data-id="${a.id}">Resolve</button></div>`)}</section>` : ''}
@@ -122,8 +120,7 @@ const settings = {
     const admin = app.me.user.role === 'admin';
     const ro = admin ? '' : ' disabled';
     return html`
-    <header class="page-head"><div class="head-text"><span class="eyebrow">Settings</span><h1>How Hope Studio works for your team</h1>
-      <p class="lede">${admin ? 'Changes are audit-logged.' : 'Only Leila (admin) can change settings.'}</p></div></header>
+    <header class="page-head"><div class="head-text"><span class="eyebrow">${admin ? 'Changes are audit-logged' : 'Only Leila (admin) can change settings'}</span><h1>Settings</h1></div></header>
     <div class="settings-grid">
       <form class="card stack-s" data-submit="saveEmail">
         <h2 class="section-title">Email</h2>
