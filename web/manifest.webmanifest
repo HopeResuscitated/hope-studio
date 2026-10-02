@@ -1,8 +1,8 @@
 {
   "name": "Hope Studio",
   "short_name": "Hope Studio",
-  "description": "Hope Resuscitated's Grant, Outreach and Social agents. Nothing goes out without your OK.",
-  "start_url": "./#inbox",
+  "description": "One place to run Hope Resuscitated: grants, outreach and social, with nothing sent or posted without your OK.",
+  "start_url": "./#home",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
@@ -28,15 +28,19 @@
   ],
   "shortcuts": [
     {
-      "name": "Approvals inbox",
+      "name": "Home",
+      "url": "./#home"
+    },
+    {
+      "name": "Approvals",
       "url": "./#inbox"
     },
     {
-      "name": "Social this week",
-      "url": "./#s-week"
+      "name": "Social library",
+      "url": "./#s-library"
     },
     {
-      "name": "Outreach this week",
+      "name": "Outreach",
       "url": "./#o-week"
     }
   ]
