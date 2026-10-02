@@ -555,9 +555,9 @@ export function createService({ store, llm = { available: false }, integrations 
     };
   });
   def('updateMessage', 'user', ({ id, ...patch }, ctx) => O.updateMessage(ctx, id, patch));
-  def('approveAndSend', 'approver', async ({ id }, ctx) => {
+  def('sendApprovedMessage', 'approver', async ({ id }, ctx) => {
     const a = approvalFor(store, 'message', id);
-    if (a.state !== 'approved' && a.state !== 'executed') approve(ctx, a.id);
+    if (!a || a.state !== 'approved') throw Object.assign(new Error('Approve the email first. Sending is a separate action.'), { status: 409 });
     return O.sendMessage(ctx, id);
   });
   def('saveGmailDraft', 'user', ({ id }, ctx) => O.saveGmailDraft(ctx, id));
@@ -752,11 +752,11 @@ export function createService({ store, llm = { available: false }, integrations 
   });
 
   def('settings', 'user', () => ({
-    settings: store.settings(), integrations: integrationStatus(), mode: integrations.mode,
+    settings: store.settings(), integrations: integrationStatus(), mode: integrations.mode, outboundEmailEnabled: store.settings().outbound_email_enabled === true,
     users: store.all('users').map(publicUser), samples: !!store.meta().samples, suppressions: store.all('suppressions'),
   }));
   def('updateSettings', 'admin', async ({ patch }, ctx) => {
-    const allowed = ['mailing_address', 'sender', 'approval_policy', 'run_budget_usd', 'slot_plan', 'banned_terms', 'targeting', 'grant_rules', 'org_profile'];
+    const allowed = ['mailing_address', 'sender', 'approval_policy', 'run_budget_usd', 'slot_plan', 'banned_terms', 'targeting', 'grant_rules', 'org_profile', 'outbound_email_enabled'];
     const clean = {};
     for (const k of allowed) if (k in patch) clean[k] = patch[k];
     if ('run_budget_usd' in clean) clean.run_budget_usd = Math.max(0.1, +clean.run_budget_usd || 3);

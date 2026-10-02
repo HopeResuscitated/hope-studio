@@ -564,9 +564,9 @@ export function seedCore(store) {
 }
 
 export async function seedAll(store, integrations) {
+  // Compatibility shim for older callers. Never creates sample records.
   seedCore(store);
-  await seedSamples(store, integrations);
-  store.setMeta({ seeded: true, seeded_at: new Date().toISOString(), samples: true });
+  store.setMeta({ seeded: true, seeded_at: new Date().toISOString(), samples: false });
 }
 
 export function clearSamples(store) {

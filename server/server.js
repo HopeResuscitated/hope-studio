@@ -15,7 +15,7 @@ import { createConnections } from './connections.js';
 import { startScheduler } from './scheduler.js';
 import { createStore } from '../web/core/store.js';
 import { createService, publicUser } from '../web/core/service.js';
-import { seedAll, seedCore } from '../web/core/seed.js';
+import { seedCore, clearSamples } from '../web/core/seed.js';
 import { raiseAlert, audit } from '../web/core/audit.js';
 
 loadEnv();
@@ -42,12 +42,19 @@ const seeded = store.load();
 const secrets = createSecrets(DATA_DIR);
 const buildIntegrations = () => createIntegrations({ dataDir: DATA_DIR, settings: () => store.settings(), cfg: secrets.cfg });
 const integrations = buildIntegrations();
+if (store.settings().outbound_email_enabled === undefined) store.setSettings({ outbound_email_enabled: false });
 if (!seeded) {
-  if (env('SEED_SAMPLES', '1') === '1') await seedAll(store, integrations);
-  else { seedCore(store); store.setMeta({ seeded: true, seeded_at: new Date().toISOString(), samples: false }); }
+  seedCore(store);
+  store.setMeta({ seeded: true, seeded_at: new Date().toISOString(), samples: false });
   store.flush();
   console.log(`Created ${adapter.file}`);
 }
+
+// Production is live-data-only. Purge any legacy demo/sample records on boot.
+clearSamples(store);
+store.removeWhere('messages', (m) => m.simulated === true || String(m.gmail_id || '').startsWith('demo-') || String(m.id || '').startsWith('demo-'));
+store.setMeta({ samples: false, live_data_only: true });
+store.flush();
 
 // First run: give each user a one-time password, printed once.
 for (const u of store.all('users', (x) => !x.password_hash)) {
