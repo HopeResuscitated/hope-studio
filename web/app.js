@@ -13,7 +13,7 @@ const SCREENS = { ...home, ...grants, ...outreach, ...social, ...shared };
 const STUDIOS = [
   { key: 'grant', label: 'Grants', sub: 'Grant Studio', home: 'g-week', nav: [['g-week', 'This week'], ['g-scout', 'Find grants'], ['g-writer', 'Drafts'], ['g-kb', 'Knowledge base']] },
   { key: 'outreach', label: 'Outreach', sub: 'Outreach Studio', home: 'o-week', nav: [['o-week', 'This week'], ['o-contacts', 'Contacts'], ['o-scout', 'Prospects'], ['o-writer', 'Drafts'], ['o-board', 'Partnerships'], ['o-kb', 'Knowledge base']] },
-  { key: 'social', label: 'Social', sub: 'Social Studio · IG + FB', home: 's-week', nav: [['s-week', 'This week'], ['s-library', 'Media library'], ['s-calendar', 'Calendar'], ['s-composer', 'Composer']] },
+  { key: 'social', label: 'Social', sub: 'Social Studio · IG + FB', home: 's-week', nav: [['s-week', 'This week'], ['s-library', 'Library'], ['s-calendar', 'Calendar'], ['s-composer', 'Composer']] },
 ];
 const studioOf = (route) => STUDIOS.find((s) => route.startsWith(s.key[0] + '-')) || null;
 

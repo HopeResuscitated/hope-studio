@@ -928,3 +928,8 @@ body.loading .page { cursor: progress; }
 .statline { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 20px; color: var(--muted); font-size: 15px; }
 .statline b { color: var(--heading); font: 600 20px var(--display); margin-right: 4px; }
 .bar-wide { margin: -8px 0 22px; max-width: 420px; }
+.prompt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
+.prompt-card { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.prompt-card .section-title { margin: 0; }
+.prompt-card .btn { margin-top: auto; }
+.prompt-card > .row { width: 100%; }

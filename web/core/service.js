@@ -621,6 +621,57 @@ export function createService({ store, llm = { available: false }, integrations 
     }[filter] || (() => true);
     return { media: rows.filter(f).sort((a, b) => b.created_at.localeCompare(a.created_at)), total: rows.length, open: S.monthPlan(store, S.planningMonth()).open.length, key: S.planningMonth() };
   });
+
+  // Prompt library: saved ideas to pair with a photo or video. Starter prompts are added once.
+  const STARTER_PROMPTS = [
+    ['Educate', 'What naloxone is', 'Explain what naloxone is and that anyone can carry it.'],
+    ['Educate', 'Louisiana law', 'Share that Louisiana has no age limit on carrying naloxone.'],
+    ['Equip', 'Find free naloxone', 'Show where to pick up free naloxone nearby and how to get it.'],
+    ['Equip', 'Host a training', 'Invite a school, church or group to host a Hope Responder training.'],
+    ['Respond', 'Call 911 first', 'Remind people to call 911 first, every time.'],
+    ['Respond', 'Rescue breathing', 'Walk through rescue breathing or the recovery position in plain steps.'],
+    ['Empower', 'Thank a partner', 'Thank a library, school or business partner by name for making access possible.'],
+    ['Empower', 'Youth voices', 'Share a short quote from a young person about why this matters.'],
+    ['Lead', 'Responder Corps', 'Spotlight the Hope Responder Corps and what students do.'],
+    ['Lead', 'Upcoming event', 'Announce an upcoming training or build day. Add the date and place before approving.'],
+  ];
+  def('prompts', 'user', () => {
+    if (!store.meta().prompts_seeded) {
+      for (const [pillar, label, text] of STARTER_PROMPTS) store.insert('prompts', { label, text, pillar, starter: true });
+      store.setMeta({ prompts_seeded: true });
+    }
+    return { prompts: store.all('prompts').sort((a, b) => PILLARS.indexOf(a.pillar) - PILLARS.indexOf(b.pillar) || a.created_at.localeCompare(b.created_at)) };
+  });
+  def('savePrompt', 'user', ({ id, label, text, pillar }, ctx) => {
+    label = String(label || '').trim(); text = String(text || '').trim();
+    if (!label || !text) throw Object.assign(new Error('Give the prompt a name and some text.'), { status: 400 });
+    if (!PILLARS.includes(pillar)) pillar = 'Educate';
+    const after = id ? store.update('prompts', id, { label, text, pillar }) : store.insert('prompts', { label, text, pillar });
+    audit(store, { actor: ctx.actor, action: id ? 'prompt.update' : 'prompt.add', item_type: 'prompt', item_id: after.id, note: label });
+    return after;
+  });
+  def('deletePrompt', 'user', ({ id }, ctx) => {
+    const p = store.get('prompts', id);
+    if (!p) return null;
+    store.remove('prompts', id);
+    audit(store, { actor: ctx.actor, action: 'prompt.delete', item_type: 'prompt', item_id: id, note: p.label });
+    return { ok: true };
+  });
+  // Pair a prompt with a photo or video. The draft lands in the next open slot and still needs a person's OK.
+  def('draftFromPrompt', 'user', async ({ media_id, prompt_id }, ctx) => {
+    const media = store.get('media_assets', media_id);
+    const prompt = store.get('prompts', prompt_id);
+    if (!media || !prompt) throw Object.assign(new Error('Pick a photo or video and a prompt.'), { status: 400 });
+    const key = S.planningMonth();
+    let slot = null;
+    for (const k of [key, addMonths(key, 1), addMonths(key, 2)]) {
+      slot = S.monthPlan(store, k).open[0];
+      if (slot) break;
+    }
+    if (!slot) throw Object.assign(new Error('No open slots in the next three months. Change the posting plan in Settings.'), { status: 409 });
+    const r = await withRun(ctx, 'social', 'prompt', (rc) => S.createPost(rc, media, slot.date, { topic: prompt.text }).then((post) => ({ summary: `Drafted "${post.title}" from the prompt "${prompt.label}"`, post })));
+    return { id: r.result.post.id };
+  });
   def('uploadMedia', 'user', async (input, ctx) => (await withRun(ctx, 'social', 'upload', (r) => S.ingestMedia(r, input).then((m) => ({ summary: `Tagged ${m.label}`, m })))).result.m);
   def('updateMedia', 'user', async ({ id, ...patch }, ctx) => {
     const before = store.get('media_assets', id);

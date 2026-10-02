@@ -12,7 +12,7 @@ const PREFIX = {
   users: 'usr', runs: 'run', review_results: 'rev', approval_items: 'apv', audit_log: 'aud',
   documents: 'doc', chunks: 'chk', facts: 'fct', grants: 'gr', grant_drafts: 'gd', draft_answers: 'ans',
   prospects: 'pr', contacts: 'ct', messages: 'msg', partnerships: 'ps', media_assets: 'med', posts: 'pst',
-  month_copies: 'mc', suppressions: 'sup', kb_gaps: 'gap', alerts: 'alr',
+  month_copies: 'mc', prompts: 'pmt', suppressions: 'sup', kb_gaps: 'gap', alerts: 'alr',
 };
 
 export function createStore(adapter = {}) {

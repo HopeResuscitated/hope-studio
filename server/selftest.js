@@ -12,6 +12,7 @@ import { parseRfp } from '../web/core/writer.js';
 import { parseInstrumentlAlert, parseCandidCsv } from '../web/core/agents/grant.js';
 import { copyMonthPlan, planningMonth } from '../web/core/agents/social.js';
 import { central } from '../web/core/util.js';
+import { approvalFor } from '../web/core/approvals.js';
 
 async function fresh() {
   const store = createStore({});
@@ -253,4 +254,18 @@ test('crm contact directory and daily gmail synchronization', async () => {
   // 5. Run daily Gmail synchronization
   const syncRes = await svc.call('syncGmailContacts', {}, leila);
   assert.ok(syncRes.total_contacts >= 5);
+});
+
+test('a post drafted from a prompt waits for a person and cannot be published', async () => {
+  const { store, svc, leila } = await fresh();
+  const { prompts } = await svc.call('prompts', {}, leila);
+  assert.ok(prompts.length >= 5, 'starter prompts are added once');
+  assert.equal((await svc.call('prompts', {}, leila)).prompts.length, prompts.length, 'and not added twice');
+  const media = store.all('media_assets')[0];
+  const { id } = await svc.call('draftFromPrompt', { media_id: media.id, prompt_id: prompts[0].id }, leila);
+  const post = store.get('posts', id);
+  assert.equal(post.topic, prompts[0].text);
+  assert.notEqual(post.status, 'published');
+  assert.notEqual(approvalFor(store, 'post', id).state, 'executed');
+  await assert.rejects(svc.call('draftFromPrompt', { media_id: 'nope', prompt_id: prompts[0].id }, leila), /Pick a photo/);
 });
