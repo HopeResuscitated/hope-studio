@@ -71,11 +71,12 @@ const week = {
         <span class="eyebrow">Social · ${d.month}</span>
         <h1>${d.stats.needsOk ? `${plural(d.stats.needsOk, 'post needs', 'posts need')} your OK.` : onTrack ? "You're on track." : 'A few slots need media.'}</h1>
       </div>
-      <button type="button" class="btn btn-primary" data-action="go" data-route="s-library">${icon('upload', 16)} Upload photos &amp; videos</button>
+      ${d.clean ? html`<button type="button" class="btn btn-primary" data-action="approveClean">${icon('check', 16)} Approve ${d.clean} clean ${d.clean === 1 ? 'post' : 'posts'}</button>`
+    : html`<button type="button" class="btn btn-primary" data-action="go" data-route="s-library">${icon('upload', 16)} Add photos &amp; videos</button>`}
     </header>
     <p class="statline" aria-label="Progress"><span><b>${d.stats.scheduled} of ${d.stats.total}</b> ${d.month} posts scheduled</span><span><b>${d.stats.weeks}</b> weeks on plan in a row</span><span><b>${d.stats.unused}</b> unused in library</span></p>
     <div class="bar bar-wide" role="img" aria-label="${pct}% scheduled"><span style="width:${pct}%"></span></div>
-    <div class="cols">
+    <div class="cols review-first">
       <section class="col-main" aria-labelledby="n7-h">
         <h2 class="section-title" id="n7-h">Next 7 days</h2>
         ${d.next7.length ? d.next7.map((p) => html`
@@ -100,7 +101,8 @@ const week = {
           <p class="small">Reviewer found nothing to fix. Approving schedules them; nothing goes live before its time.</p>
           <div class="row gap-s wrap"><button type="button" class="btn btn-primary btn-sm" data-action="approveClean">Approve ${d.clean}</button><button type="button" class="link-btn" data-action="go" data-route="s-calendar">Review on calendar</button></div></div>` : ''}
         ${d.open.length ? html`<div class="card note-card"><span class="chip chip-warn">${plural(d.open.length, 'open slot')}</span>
-          <p class="small">${d.open.map((o) => fdate(o.date, { weekday: false })).join(' and ')} ${d.open.length === 1 ? 'has' : 'have'} no media yet. The library is low on ${d.lowPillar} content, so upload a photo or two.</p>
+          <p class="small">No media yet. The library is low on ${d.lowPillar} content, so add a photo or two.</p>
+          <div class="slot-chips">${d.open.slice(0, 6).map((o) => html`<span class="slot-chip">${fdate(o.date, { weekday: false })}</span>`)}${d.open.length > 6 ? html`<span class="slot-chip more">+${d.open.length - 6} more</span>` : ''}</div>
           <div class="row gap-s wrap"><button type="button" class="btn btn-sm" data-action="autofill">Auto-fill</button><button type="button" class="link-btn" data-action="go" data-route="s-calendar">View calendar</button></div></div>` : ''}
         ${!d.flagged.length && !d.clean && !d.open.length ? html`<div class="card note-card"><p class="small">Nothing needs you right now.</p></div>` : ''}
       </aside>
@@ -121,6 +123,10 @@ const week = {
 };
 
 // ---------------------------------------------------------------------------
+
+// The details sheet (phones) is only open during a visit: it closes whenever you navigate.
+let libSheetOpen = false;
+window.addEventListener('hashchange', () => { libSheetOpen = false; });
 
 const library = {
   title: 'Social · Library',
@@ -164,7 +170,9 @@ const library = {
           ${!d.media.length ? html`<p class="muted">Nothing here yet.</p>` : ''}
         </div>
       </section>
-      ${sel ? html`<aside class="col-side card" aria-label="Selected item">
+      ${sel ? html`<div class="lib-scrim ${libSheetOpen ? 'open' : ''}" data-action="closeSheet" aria-hidden="true"></div>
+      <aside class="col-side card lib-sheet ${libSheetOpen ? 'open' : ''}" aria-label="Selected item">
+        <button type="button" class="btn btn-sm sheet-close" data-action="closeSheet">${icon('close', 16)} Close</button>
         ${sel.thumb ? html`<img class="preview" src="${sel.thumb}" alt="${sel.subject || sel.label}">` : html`<div class="preview ph">${sel.kind === 'video' ? 'Video' : 'Photo'}${sel.duration_s ? ` · 0:${String(Math.round(sel.duration_s)).padStart(2, '0')}` : ''} · ${sel.label}</div>`}
         <h2 class="section-title">What the agent sees</h2>
         <dl class="dl">
@@ -176,7 +184,7 @@ const library = {
           <div><dt>Tagged by</dt><dd>${sel.tag_source === 'vision' ? 'Claude (vision)' : sel.tag_source === 'sample' ? 'Sample data' : 'Filename (connect Claude for vision tags)'}</dd></div>
         </dl>
         ${sel.needsConsent ? html`<div class="fixbox"><p class="small">${sel.people_note || 'Confirm there are no people, or that you hold a signed release.'}</p><div class="row gap-s wrap"><button type="button" class="btn btn-primary btn-sm" data-action="consent" data-id="${sel.id}">I have permission</button><button type="button" class="btn btn-sm" data-action="noPeople" data-id="${sel.id}">No people in it</button></div></div>` : ''}
-        <div class="row gap-s wrap">${sel.uses.length ? html`<button type="button" class="btn btn-primary" data-action="go" data-route="s-composer" data-id="${sel.uses[0].id}">Edit post</button>` : ''}<button type="button" class="btn" data-action="exclude" data-id="${sel.id}">Don't use</button></div>
+        <div class="row gap-s wrap">${sel.uses.length ? html`<button type="button" class="btn btn-primary" data-action="go" data-route="s-composer" data-id="${sel.uses[0].id}">Edit post</button>` : ''}${sel.uses.length ? '' : html`<button type="button" class="btn btn-primary" data-action="makePost" data-id="${sel.id}">${icon('plus', 16)} Make a post</button>`}<button type="button" class="btn" data-action="promptForMedia" data-id="${sel.id}">${icon('sparkle', 16)} Use a prompt</button><button type="button" class="btn btn-ghost" data-action="exclude" data-id="${sel.id}">Don't use</button></div>
       </aside>` : ''}
     </div>`}`;
   },
@@ -212,7 +220,26 @@ const library = {
       toast('Prompt deleted');
       app.refresh();
     },
-    selectMedia(el, app) { app.setSel('s-library', el.dataset.id); app.refresh(); },
+    selectMedia(el, app) { app.setSel('s-library', el.dataset.id); libSheetOpen = true; app.refresh(); },
+    async makePost(el, app) {
+      const r = await app.call('draftFromPrompt', { media_id: el.dataset.id });
+      libSheetOpen = false;
+      toast('Draft ready. Review it, then approve.');
+      app.go('s-composer', r.id);
+    },
+    closeSheet(el, app) { libSheetOpen = false; app.refresh(); },
+    async promptForMedia(el, app) {
+      const { prompts } = await app.call('prompts');
+      const d = await dialog({
+        title: 'Pick a prompt', submit: 'Draft the post',
+        body: field('Prompt', 'prompt_id', { value: prompts[0]?.id, options: prompts.map((p) => [p.id, `${p.pillar} · ${p.label}`]) }),
+      });
+      if (!d) return;
+      const r = await app.call('draftFromPrompt', { media_id: el.dataset.id, prompt_id: d.prompt_id });
+      toast('Draft ready. Review it, then approve.');
+      libSheetOpen = false;
+      app.go('s-composer', r.id);
+    },
     async autofill(el, app) { const r = await app.call('autofill', {}); toast(`Drafted ${plural(r.created, 'post')}${r.open ? `; ${r.open} still open` : ''}`); app.refresh(); },
     async exclude(el, app) { await app.call('excludeMedia', { id: el.dataset.id }); toast("The agent won't use it"); app.refresh(); },
     async consent(el, app) { await consentDialog(app, el.dataset.id); },
@@ -235,6 +262,25 @@ function promptsPanel(d) {
     <p class="muted small">${p.text}</p>
     <button type="button" class="btn btn-sm btn-primary" data-action="usePrompt" data-id="${p.id}" data-text="${p.text}">Use with a photo or video</button>
   </article>`)}</div>`;
+}
+
+// Pick something from the library: unused items first, then what is already scheduled.
+async function pickFromLibrary(app, { title, submit = 'Use this', current = null, extra = '' } = {}) {
+  const { media } = await app.call('library', { filter: 'all' });
+  if (!media.length) { toast('The library is empty. Add a photo or video first.', 'bad'); return null; }
+  const unused = media.filter((m) => !m.uses.length);
+  const used = media.filter((m) => m.uses.length);
+  const card = (m) => html`<label class="pick"><input type="radio" name="media_id" value="${m.id}" ${when(m.id === current, 'checked')} required>
+    <span class="pick-card">${thumb(m)}<span class="pick-name">${m.label}</span>
+    <span class="pick-tag ${m.uses.length ? '' : 'new'}">${m.id === current ? 'On this post' : m.uses.length ? `Posts ${fdate(m.uses[0].when, { weekday: false })}` : 'Unused'}${m.needsConsent ? ' · needs release' : ''}</span></span></label>`;
+  const d = await dialog({
+    title, submit, wide: true,
+    body: html`<p class="muted small">Tap one. If people are in it, a signed release is still needed before it can post.</p>
+      ${unused.length ? html`<h3 class="mono-label">Unused (${unused.length})</h3><div class="pick-grid">${unused.map(card)}</div>` : ''}
+      ${used.length ? html`<h3 class="mono-label">Already in a post (${used.length})</h3><div class="pick-grid">${used.map(card)}</div>` : ''}
+      ${extra}`,
+  });
+  return d || null;
 }
 
 async function uploadFiles(files, app) {
@@ -289,15 +335,20 @@ const composer = {
         <h1 class="h1-sm">${p.title}</h1>
         <span class="muted">Picked by the agent from your library · ${p.pillar} pillar${p.sample ? ' · sample' : ''}</span>
       </div>
-      <div class="row gap-s wrap">
+      <div class="row gap-s wrap head-tools">
         <button type="button" class="btn" data-action="showPillarIdeas" data-pillar="${p.pillar}">${icon('sparkle', 16)} Pillar Ideas</button>
-        ${!live ? html`<button type="button" class="btn" data-action="swapMedia" data-id="${p.id}">Swap media</button>` : ''}
+        ${!live ? html`<button type="button" class="btn" data-action="changeMedia" data-id="${p.id}" data-current="${p.media_id}">${icon('photo', 16)} Change photo/video</button>` : ''}
         ${live ? chip(`Posted ${fdate(p.published_at, { time: true })}${p.simulated ? ' (demo)' : ''}`, 'good')
           : scheduled ? chip(`Scheduled · ${fdate(p.scheduled_at, { time: true })}`, 'good')
-            : html`<button type="button" class="btn btn-primary" data-action="approvePost" data-id="${p.id}"${blocking ? ' disabled' : ''}>Approve and schedule</button>`}
+            : html`<button type="button" class="btn btn-primary only-wide" data-action="approvePost" data-id="${p.id}"${blocking ? ' disabled' : ''}>Approve and schedule</button>`}
       </div>
     </header>
     <div class="composer">
+      <div class="media-strip only-narrow">
+        ${p.media?.thumb ? html`<img src="${p.media.thumb}" alt="">` : html`<span class="strip-ph">${icon(p.media?.kind === 'video' ? 'video' : 'photo', 22)}</span>`}
+        <span class="grow stack-xs"><strong>${p.media?.label || 'No media'}</strong><span class="muted small">${p.media?.kind === 'video' ? 'Video' : 'Photo'} · ${p.pillar}</span></span>
+        ${!live ? html`<button type="button" class="btn btn-sm" data-action="changeMedia" data-id="${p.id}" data-current="${p.media_id}">Change</button>` : ''}
+      </div>
       <section class="stack-s" aria-label="Media and timing">
         ${p.media?.thumb ? html`<img class="preview tall" src="${p.media.thumb}" alt="${p.alt_text}">` : html`<div class="preview tall ph">${icon(p.media?.kind === 'video' ? 'video' : 'photo', 40)}<span>${p.media?.kind === 'video' ? `Video${p.media.duration_s ? ` · 0:${String(Math.round(p.media.duration_s)).padStart(2, '0')}` : ''} · 9:16` : 'Photo'}</span></div>`}
         <form class="card card-flat stack-s" data-submit="saveTiming" data-id="${p.id}">
@@ -319,6 +370,10 @@ const composer = {
         <div class="field"><label for="alt">Alt text</label><input id="alt" value="${p.alt_text}"${live ? ' readonly' : ''}></div>
         <div class="row between wrap gap-s">${sourcesRow(d.citations)}${!live ? html`<button type="button" class="btn btn-primary btn-sm" data-action="savePost" data-id="${p.id}">Save and re-check</button>` : ''}</div>
       </section>
+      ${!live && !scheduled ? html`<div class="composer-bar only-narrow" role="region" aria-label="Approve this post">
+        <span class="bar-status ${blocking ? 'warn' : 'good'}">${icon(blocking ? 'alert' : 'check', 16)} ${blocking ? `${plural(blocking, 'thing')} to fix` : 'All checks pass'}</span>
+        <button type="button" class="btn btn-primary" data-action="approvePost" data-id="${p.id}"${blocking ? ' disabled' : ''}>Approve and schedule</button>
+      </div>` : ''}
       <aside class="card reviewer" aria-labelledby="rev-h">
         <div class="stack-xs"><h2 class="section-title" id="rev-h">Reviewer</h2><span class="muted small">Checked before anything posts</span></div>
         ${checksList(d.results)}
@@ -358,6 +413,16 @@ const composer = {
     },
     async approvePost(el, app) { await app.call('approvePost', { id: el.dataset.id }); toast('Approved and scheduled'); app.refresh(); },
     async swapMedia(el, app) { await app.call('swapMedia', { id: el.dataset.id }); toast('Swapped to media without people in frame'); app.refresh(); },
+    async changeMedia(el, app) {
+      const d = await pickFromLibrary(app, {
+        title: 'Choose a photo or video', submit: 'Use this', current: el.dataset.current,
+        extra: html`<label class="check mt-s"><input type="checkbox" name="keep" value="1" checked> Keep my caption (only the photo changes)</label>`,
+      });
+      if (!d || d.media_id === el.dataset.current) return;
+      await app.call('swapMedia', { id: el.dataset.id, mediaId: d.media_id, keepCaption: !!d.keep });
+      toast(d.keep ? 'Photo changed. Your caption is kept.' : 'Photo changed and a new caption drafted.');
+      app.refresh();
+    },
     async rewrite(el, app) { await app.call('rewriteCaption', { id: el.dataset.id }); toast('Fresh caption drafted'); app.refresh(); },
     async applyFix(el, app) { await app.call('applyFix', { resultId: el.dataset.id }); toast('Applied'); app.refresh(); },
     focusEditor() { document.getElementById('caption')?.focus(); },
@@ -394,14 +459,15 @@ const calendar = {
     for (let day = 1; day <= days; day++) {
       const s = bySlot.get(day);
       const posts = [...(s?.posts || []), ...(offPlan.get(day) || [])];
-      cells.push(html`<div class="cal-cell ${s ? 'slot' : ''} ${s?.past ? 'past' : ''}">
-        <span class="cal-day">${day}</span>
+      const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][(lead + day - 1) % 7];
+      cells.push(html`<div class="cal-cell ${s ? 'slot' : ''} ${s?.past ? 'past' : ''} ${!s && !posts.length ? 'idle' : ''}">
+        <span class="cal-day">${day}<span class="cal-dow"> ${dow}</span></span>
         ${posts.map((p) => html`<button type="button" class="cal-chip ${p.pillar ? 'p-' + p.pillar.toLowerCase() : ''}" data-action="go" data-route="s-composer" data-id="${p.id}">
           <span class="cal-time">${(() => { const c = ct(p.scheduled_at); return time12(c.h, c.min).replace(':00', ''); })()} · ${p.platforms.length === 2 ? 'IG + FB' : p.platforms[0] === 'instagram' ? 'IG' : 'FB'}</span>
           <span>${p.title}</span>
           ${p.status === 'published' ? html`<span class="cal-state">${icon('check', 12)} Posted</span>` : p.status === 'scheduled' ? html`<span class="cal-state">${icon('check', 12)} Scheduled</span>` : html`<span class="cal-state">${icon('alert', 12)} ${p.blocking ? 'Fix' : 'Needs OK'}</span>`}
         </button>`)}
-        ${s && !posts.length && !s.past ? html`<button type="button" class="cal-open" data-action="fillSlot" data-slot="${s.key}">Open slot · needs media</button>` : ''}
+        ${s && !posts.length && !s.past ? html`<button type="button" class="cal-open" data-action="pickForSlot" data-slot="${s.key}" data-label="${dow} ${day}">Open · choose media</button>` : ''}
       </div>`);
     }
     return html`
@@ -425,6 +491,13 @@ const calendar = {
   },
   actions: {
     async autofillMonth(el, app) { const r = await app.call('autofill', { key: el.dataset.key }); toast(r.created ? `Drafted ${plural(r.created, 'post')}${r.open ? `; ${r.open} still open` : ''}` : 'No unused media fits. Upload some first.', r.created ? 'good' : 'info'); app.refresh(); },
+    async pickForSlot(el, app) {
+      const d = await pickFromLibrary(app, { title: `Choose media for ${el.dataset.label}`, submit: 'Draft the post' });
+      if (!d) return;
+      const r = await app.call('draftFromPrompt', { media_id: d.media_id, slot: el.dataset.slot });
+      toast('Draft ready. Review it, then approve.');
+      app.go('s-composer', r.id);
+    },
     async fillSlot(el, app) { const r = await app.call('autofill', { key: el.dataset.slot.slice(0, 7), only: el.dataset.slot }); toast(r.created ? 'Drafted a post for that slot' : 'No unused media fits that slot yet.', r.created ? 'good' : 'info'); app.refresh(); },
   },
 };

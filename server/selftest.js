@@ -11,6 +11,7 @@ import { trimToLimit, findBannedTerms, replaceTerms, reviewPostHard, unsourcedNu
 import { parseRfp } from '../web/core/writer.js';
 import { parseInstrumentlAlert, parseCandidCsv } from '../web/core/agents/grant.js';
 import { copyMonthPlan, planningMonth } from '../web/core/agents/social.js';
+import { addMonths as addMonthsKey } from '../web/core/util.js';
 import { central } from '../web/core/util.js';
 import { approvalFor } from '../web/core/approvals.js';
 
@@ -289,4 +290,33 @@ test('prompt drafts reject bad input and excluded media', async () => {
   await assert.rejects(svc.call('savePrompt', { label: 'x', text: 'y'.repeat(600), pillar: 'Educate' }, leila), /too long/i);
   await assert.rejects(svc.call('savePrompt', { id: 'nope', label: 'x', text: 'y', pillar: 'Educate' }, leila), /not found/i);
   assert.deepEqual(await svc.call('deletePrompt', { id: 'nope' }, leila), { ok: false });
+});
+
+test('choosing media from the library: swap keeps the caption, slots can be picked, nothing skips approval', async () => {
+  const { store, svc, leila } = await fresh();
+  const post = store.all('posts', (p) => p.status === 'drafted')[0];
+  const target = store.all('media_assets', (m) => m.id !== post.media_id && !m.excluded)[0];
+  const before = post.caption_ig;
+
+  const kept = await svc.call('swapMedia', { id: post.id, mediaId: target.id, keepCaption: true }, leila);
+  assert.equal(kept.media_id, target.id, 'the chosen item is used, not a random one');
+  assert.equal(kept.caption_ig, before, 'the caption the person has is kept');
+
+  const fresh2 = await svc.call('swapMedia', { id: post.id, mediaId: post.media_id }, leila);
+  assert.equal(fresh2.media_id, post.media_id);
+  assert.notEqual(approvalFor(store, 'post', post.id).state, 'executed', 'a swap never publishes');
+
+  const bad = store.all('media_assets', (m) => m.id !== post.media_id)[1];
+  await svc.call('excludeMedia', { id: bad.id }, leila);
+  await assert.rejects(svc.call('swapMedia', { id: post.id, mediaId: bad.id }, leila), /Don't use/);
+
+  // A specific open slot, no prompt
+  const key = planningMonth();
+  const open = (await svc.call('calendar', { key }, leila)).slots.find((s) => !s.posts.length && !s.past)
+    || (await svc.call('calendar', { key: addMonthsKey(key) }, leila)).slots.find((s) => !s.posts.length);
+  const m = store.all('media_assets', (x) => !x.excluded)[2];
+  const { id } = await svc.call('draftFromPrompt', { media_id: m.id, slot: open.key }, leila);
+  assert.equal(store.get('posts', id).scheduled_at, open.date, 'the post lands in the slot that was picked');
+  assert.notEqual(store.get('posts', id).status, 'published');
+  await assert.rejects(svc.call('draftFromPrompt', { media_id: m.id, slot: open.key }, leila), /no longer open/);
 });

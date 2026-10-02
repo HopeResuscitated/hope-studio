@@ -97,7 +97,7 @@ export function knowledgeScreen(collection, { eyebrow, lede, ask, askLabel }) {
           <article class="card">
             <div class="card-top"><h2 class="section-title">Locked facts</h2>${isAdmin ? html`<button type="button" class="btn btn-sm" data-action="addFact">${icon('plus', 16)} Add fact</button>` : ''}</div>
             <p class="muted small">Numbers that must never drift. Writers quote them exactly; a change here re-checks every draft that cites the old value${isAdmin ? '' : '. Only Leila can change them'}.</p>
-            <div class="table-wrap"><table class="table">
+            <div class="table-wrap" tabindex="0"><table class="table">
               <thead><tr><th scope="col">Fact</th><th scope="col">Value</th><th scope="col">Source</th><th scope="col">Verified</th>${isAdmin ? html`<th scope="col"><span class="sr-only">Actions</span></th>` : ''}</tr></thead>
               <tbody>${d.facts.map((f) => html`<tr>
                 <td><strong>${f.label}</strong><div class="muted small">${f.statement}</div></td>
