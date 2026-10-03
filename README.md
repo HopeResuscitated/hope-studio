@@ -91,6 +91,16 @@ Other engines and connections, set in `.env`:
   - Nightly: backup
 - **Cost guard.** Every run records tokens and cost. A run that reaches its budget stops and alerts the admin.
 
+## Manage it on the go
+
+Hope Studio is built to run from a phone. Install it to the home screen (above), then everything you do most often is one tap or one thumb away.
+
+- **Quick Capture.** A floating **+** button sits above the tab bar on every screen. It opens a bottom sheet with the five things you reach for in the field: **New social post**, **Take a photo**, **Add a contact**, **Find grants**, and **Search everything**. Escape or Cancel closes it.
+- **Camera capture.** **Take a photo** opens the phone's camera directly (`capture="environment"`), reads the file, and drops it straight into the Social media library — ready for the agent to tag by content pillar and flag for consent.
+- **Pull to refresh.** Drag down from the top of any screen to re-run the view and pull the latest data.
+- **Online / offline awareness.** A slim banner appears the moment the connection drops, and the app shell keeps working. When you come back online, a "Back online" toast fires and the current screen refreshes itself. Approving and sending still need a connection — that's deliberate.
+- **Thumb-sized targets.** The tab bar and the floating button are sized for one-handed use (44 px tabs, a 56 px action button), and the layout is verified at 390 × 844 (iPhone 12/13/14 class).
+
 ## Decisions made so the build could finish
 
 These were the open questions in the build sheet. Each has a default you can change:

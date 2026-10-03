@@ -237,7 +237,7 @@ function promptsPanel(d) {
   </article>`)}</div>`;
 }
 
-async function uploadFiles(files, app) {
+export async function uploadFiles(files, app) {
   const list = files.filter((f) => /^(image|video)\//.test(f.type) || /\.(heic|mov|mp4)$/i.test(f.name));
   if (!list.length) return toast('Choose photo or video files.', 'bad');
   toast(`Tagging ${plural(list.length, 'file')}…`, 'info');

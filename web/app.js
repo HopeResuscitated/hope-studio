@@ -4,7 +4,7 @@ import { connect } from './api.js';
 import { html, raw, icon, logo, toast, esc } from './ui.js';
 import grants from './views/grants.js';
 import outreach from './views/outreach.js';
-import social from './views/social.js';
+import social, { uploadFiles } from './views/social.js';
 import shared from './views/shared.js';
 import home from './views/home.js';
 
@@ -277,6 +277,94 @@ function openShortcutsDialog() {
   });
 }
 
+// ---------- Quick capture (mobile-first) ----------
+
+// A photo taken on the phone goes straight into the media library, tagged like any other upload.
+function capturePhoto(app) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*,video/*';
+  input.setAttribute('capture', 'environment');
+  input.addEventListener('change', async () => {
+    if (!input.files?.length) return;
+    try {
+      await uploadFiles([...input.files], app);
+      app.go('s-library');
+    } catch (err) {
+      toast(err.message, 'bad');
+    }
+  });
+  input.click();
+}
+
+// One tap from anywhere: draft a post, snap a photo, add a contact, find grants or search.
+function openQuickCapture(app) {
+  const host = document.getElementById('sheet');
+  const item = (kind, ic, label, sub) => html`<button type="button" class="sheet-item" data-sheet="${kind}">
+    <span class="sheet-ic">${icon(ic, 20)}</span><span class="sheet-text">${label}<small>${sub}</small></span>${icon('right', 16, 'sheet-arrow')}</button>`;
+  host.innerHTML = String(html`
+    <div class="sheet-scrim" data-close></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="Quick capture">
+      <div class="sheet-grab" aria-hidden="true"></div>
+      <p class="sheet-title">Quick capture</p>
+      ${item('post', 'photo', 'New social post', 'Draft an Instagram or Facebook post')}
+      ${item('photo', 'camera', 'Take a photo', 'Capture it and add it to the media library')}
+      ${item('contact', 'mail', 'Add a contact', 'A new partner or prospect')}
+      ${item('grants', 'search', 'Find grants', 'Search Grants.gov and your sources')}
+      ${item('search', 'search', 'Search everything', 'Grants, prospects, posts and facts')}
+      <button type="button" class="sheet-item sheet-cancel" data-close>${icon('close', 18)}<span class="sheet-text">Cancel</span></button>
+    </div>`);
+  host.hidden = false;
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const close = () => { host.hidden = true; host.innerHTML = ''; document.removeEventListener('keydown', onKey); };
+  document.addEventListener('keydown', onKey);
+  host.querySelector('.sheet-scrim').addEventListener('click', close);
+  host.querySelector('.sheet-cancel').addEventListener('click', close);
+  host.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => {
+    const kind = b.dataset.sheet;
+    close();
+    if (kind === 'post') app.go('s-composer');
+    else if (kind === 'contact') app.go('o-contacts');
+    else if (kind === 'grants') app.go('g-scout');
+    else if (kind === 'search') openSearchDialog(app);
+    else if (kind === 'photo') capturePhoto(app);
+  }));
+  setTimeout(() => host.querySelector('.sheet-item')?.focus(), 30);
+}
+
+// ---------- Online / offline awareness ----------
+
+function updateNet() {
+  const banner = document.getElementById('net');
+  if (!banner) return;
+  const off = navigator.onLine === false;
+  banner.hidden = !off;
+  banner.innerHTML = off ? String(html`${icon('alert', 16)}<span>You're offline. Hope Studio reconnects when your signal returns.</span>`) : '';
+}
+window.addEventListener('online', () => { updateNet(); toast('Back online', 'good'); app.refresh(); });
+window.addEventListener('offline', () => { updateNet(); toast("You're offline. Approving and sending need a connection.", 'bad'); });
+
+// ---------- Pull to refresh (touch) ----------
+
+let pullY = null;
+document.addEventListener('touchstart', (ev) => {
+  if (ev.touches.length !== 1 || window.scrollY > 0 || document.body.classList.contains('nav-open')) { pullY = null; return; }
+  if (ev.target.closest('.sheet-host, .dialog-host, .side, .tabbar')) { pullY = null; return; }
+  pullY = ev.touches[0].clientY;
+}, { passive: true });
+document.addEventListener('touchmove', (ev) => {
+  if (pullY === null || window.scrollY > 0) return;
+  const dy = ev.touches[0].clientY - pullY;
+  document.body.classList.toggle('pull-ready', dy > 64);
+}, { passive: true });
+document.addEventListener('touchend', () => {
+  if (pullY !== null && document.body.classList.contains('pull-ready')) {
+    document.body.classList.remove('pull-ready');
+    render({ scrollTop: true });
+  }
+  pullY = null;
+}, { passive: true });
+
 // ---------- Events ----------
 
 const GLOBAL = {
@@ -288,6 +376,7 @@ const GLOBAL = {
   async logout() { await app.api.logout(); location.reload(); },
   openSearch() { openSearchDialog(app); },
   openShortcuts() { openShortcutsDialog(); },
+  quickCapture() { openQuickCapture(app); },
   toggleTheme() {
     const cur = store.get('theme', 'system');
     const next = cur === 'system' ? 'dark' : cur === 'dark' ? 'light' : 'system';
@@ -427,6 +516,7 @@ window.addEventListener('hashchange', () => render());
       <button type="button" class="icon-btn" data-action="toggleTheme" aria-label="Toggle theme" title="Toggle theme">${icon('sun', 18)}</button>
     </div>
   `);
+  $('#fab').innerHTML = String(html`${icon('plus', 24)}`);
   try {
     app.api = await connect();
   } catch (err) {
@@ -442,6 +532,7 @@ window.addEventListener('hashchange', () => render());
   }
   await render();
   document.body.classList.add('ready');
+  updateNet();
   // Installable app and an offline shell (only where the browser allows it).
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => { /* previews and some embeds refuse this */ });
