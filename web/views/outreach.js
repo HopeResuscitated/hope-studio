@@ -202,7 +202,7 @@ const writer = {
       </div>
       <div class="row gap-s wrap">
         ${m.kind === 'email' && !sent ? html`<button type="button" class="btn" data-action="saveGmailDraft" data-id="${m.id}">${m.gmail_draft_id ? 'Saved to Gmail drafts' : 'Save to Gmail drafts'}</button>
-        <button type="button" class="btn btn-primary" data-action="approveSend" data-id="${m.id}"${blocking || ['queued', 'locked', 'cancelled', 'suppressed'].includes(m.status) ? ' disabled' : ''}>Approve and send</button>` : ''}
+        <button type="button" class="btn btn-primary" data-action="approveSend" data-id="${m.id}" data-approval="${a?.id || ''}"${blocking || ['queued', 'locked', 'cancelled', 'suppressed'].includes(m.status) ? ' disabled' : ''}>${a?.state === 'approved' ? 'Send approved email' : 'Approve and send'}</button>` : ''}
         ${sent && !m.replied_at ? html`<button type="button" class="btn" data-action="markReplied" data-id="${m.id}">They replied</button>` : ''}
       </div>
     </header>
@@ -248,11 +248,22 @@ const writer = {
     async skipPolish(el, app) { await app.call('skipPolish', { messageId: app.sel('o-writer') }); app.refresh(); },
     focusEditor() { document.getElementById('msg-body')?.focus(); },
     async approveSend(el, app) {
-      const ok = await dialog({ title: 'Approve and send?', submit: 'Approve and send', body: html`<p>This approves the email and sends it through Gmail from ${app.me.user.name.split(' ')[0] === 'Leila' ? 'your' : "the team's"} account. The day-7 follow-up waits in the queue and needs its own OK.</p>` });
+      const id = el.dataset.id;
+      const already = el.dataset.approval && el.textContent.trim() === 'Send approved email';
+      const ok = await dialog({
+        title: already ? 'Send approved email?' : 'Approve and send?',
+        submit: already ? 'Send' : 'Approve and send',
+        body: html`<p>${already ? 'This sends the approved email' : 'This approves the email, then sends it'} through Gmail from ${app.me.user.name.split(' ')[0] === 'Leila' ? 'your' : "the team's"} account. The day-7 follow-up waits in the queue and needs its own OK.</p>`,
+      });
       if (!ok) return;
-      const m = await app.call('approveAndSend', { id: el.dataset.id });
-      toast(m.simulated ? 'Approved. Demo: logged as sent, no email left this browser.' : 'Sent');
-      app.refresh();
+      // Approve first; sending stays a separate, deliberate step in the data layer.
+      if (el.dataset.approval) await app.call('approve', { id: el.dataset.approval });
+      try {
+        const m = await app.call('sendApprovedMessage', { id });
+        toast(m.simulated ? 'Approved. Demo: logged as sent, no email left this browser.' : 'Sent');
+      } finally {
+        app.refresh();
+      }
     },
     async saveGmailDraft(el, app) { await app.call('saveGmailDraft', { id: el.dataset.id }); toast('Saved to Gmail drafts'); app.refresh(); },
     async markReplied(el, app) {

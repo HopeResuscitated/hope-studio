@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStore } from '../web/core/store.js';
-import { seedAll } from '../web/core/seed.js';
+import { seedCore, seedSamples } from '../web/core/seed.js';
 import { createService } from '../web/core/service.js';
 import { askKb } from '../web/core/kb.js';
 import { trimToLimit, findBannedTerms, replaceTerms, reviewPostHard, unsourcedNumbers, callsFirst } from '../web/core/reviewer.js';
@@ -17,8 +17,15 @@ import { approvalFor } from '../web/core/approvals.js';
 async function fresh() {
   const store = createStore({});
   store.load();
-  const integrations = { mode: 'demo' };
-  await seedAll(store, integrations);
+  // A stand-in Gmail so the send path can be exercised without real credentials.
+  const integrations = {
+    mode: 'demo',
+    gmail: { available: true, async send() { return { id: 'test-message', threadId: 'test-thread' }; }, async createDraft() { return { id: 'test-draft' }; } },
+  };
+  // Production never seeds sample records, but the guarantee suite needs the
+  // canvas fixtures, so it seeds them explicitly here.
+  seedCore(store);
+  await seedSamples(store, integrations);
   const svc = createService({ store, integrations });
   const leila = store.find('users', (u) => u.username === 'leila');
   const cierra = store.find('users', (u) => u.username === 'cierra');
@@ -67,11 +74,17 @@ test('roles: only Leila changes settings; both can approve', async () => {
 
 test('email: CAN-SPAM footer required, students never contacted, opt-outs honored', async () => {
   const { store, svc, leila } = await fresh();
+  await svc.call('updateSettings', { patch: { outbound_email_enabled: true } }, leila);
   const msg = store.find('messages', (m) => m.sequence_step === 1 && store.get('prospects', m.prospect_id).segment === 'school');
-  await assert.rejects(svc.call('approveAndSend', { id: msg.id }, leila), /blocking/);
+  const approval = store.find('approval_items', (a) => a.item_type === 'message' && a.item_id === msg.id);
+  // The CAN-SPAM flag blocks approval until the mailing address is set.
+  await assert.rejects(svc.call('approve', { id: approval.id }, leila), /blocking/);
   await svc.call('updateSettings', { patch: { mailing_address: 'PO Box 0, St. Francisville, LA 70775' } }, leila);
   assert.ok(store.get('messages', msg.id).body.includes('PO Box 0'));
-  const sent = await svc.call('approveAndSend', { id: msg.id }, leila);
+  // Approval and send are separate steps: sending an unapproved email is refused.
+  await assert.rejects(svc.call('sendApprovedMessage', { id: msg.id }, leila), /Approve the email first/);
+  await svc.call('approve', { id: approval.id }, leila);
+  const sent = await svc.call('sendApprovedMessage', { id: msg.id }, leila);
   assert.equal(sent.status, 'sent');
   await assert.rejects(svc.call('addContact', { prospectId: msg.prospect_id, title: 'Student council', email: 'kid@example.org' }, leila), /students/);
   const other = store.find('messages', (m) => m.sequence_step === 1 && m.status !== 'sent' && m.to);
@@ -81,9 +94,11 @@ test('email: CAN-SPAM footer required, students never contacted, opt-outs honore
 
 test('follow-up waits 7 days and stops when they reply', async () => {
   const { store, svc, leila } = await fresh();
-  await svc.call('updateSettings', { patch: { mailing_address: 'PO Box 0, St. Francisville, LA 70775' } }, leila);
+  await svc.call('updateSettings', { patch: { outbound_email_enabled: true, mailing_address: 'PO Box 0, St. Francisville, LA 70775' } }, leila);
   const first = store.find('messages', (m) => m.sequence_step === 1 && store.get('prospects', m.prospect_id).segment === 'school');
-  await svc.call('approveAndSend', { id: first.id }, leila);
+  const approval = store.find('approval_items', (a) => a.item_type === 'message' && a.item_id === first.id);
+  await svc.call('approve', { id: approval.id }, leila);
+  await svc.call('sendApprovedMessage', { id: first.id }, leila);
   const follow = store.find('messages', (m) => m.prospect_id === first.prospect_id && m.sequence_step === 2);
   assert.equal(follow.status, 'queued');
   store.update('messages', follow.id, { due_at: new Date(Date.now() - 1000).toISOString() });
